@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row align-items-center mb-5 mt-5">
+    <div class="col-md-6 pe-5">
+        <h1 class="display-4 fw-bold text-dark mb-3">Học Tiếng Anh Thông Minh với AI</h1>
+        <p class="lead text-muted mb-4">Hệ thống tự động phân tích điểm yếu cá nhân và tạo bài tập sinh ra từ LLM (Gemini). Khắc phục kiến thức bằng thuật toán Spaced Repetition (SM-2) chuyên nghiệp.</p>
+        <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg rounded-pill px-4 shadow-sm">Bắt đầu học ngay</a>
+    </div>
+    <div class="col-md-6 text-center mt-4 mt-md-0">
+        <i class="bi bi-mortarboard-fill" style="font-size: 15rem; color: #0d6efd; opacity: 0.9;"></i>
+    </div>
+</div>
+
+<div class="row mt-5 pt-5 text-center">
+    <div class="col-md-4 mb-4">
+        <i class="bi bi-cpu fs-1 text-primary mb-3"></i>
+        <h4>AI Gen Bài Tập</h4>
+        <p class="text-muted">Gemini biên soạn 100% tài nguyên bài tập mới cá nhân hóa không giới hạn cho bạn.</p>
+    </div>
+    <div class="col-md-4 mb-4">
+        <i class="bi bi-radar fs-1 text-danger mb-3"></i>
+        <h4>Weakness Tracking</h4>
+        <p class="text-muted">Xác định chủ đề ngữ pháp từ vựng nào bạn đang bị lỗ hổng kiến thức.</p>
+    </div>
+    <div class="col-md-4 mb-4">
+        <i class="bi bi-calendar2-check fs-1 text-success mb-3"></i>
+        <h4>Spaced Repetition</h4>
+        <p class="text-muted">Cập nhật lịch sử và tính thời gian tốt nhất ôn lại bài theo giáo trình SM-2.</p>
+    </div>
+</div>
+{% endblock %}

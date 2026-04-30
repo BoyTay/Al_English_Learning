@@ -1,0 +1,22 @@
+services:
+  web_app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      # Lấy service URL để gọi đến AI Container
+      - AI_SERVICE_URL=http://ai_service:5001/generate
+      - SECRET_KEY=abcd
+    env_file:
+      - .env
+    volumes:
+      - ./instance:/app/instance
+    depends_on:
+      - ai_service
+
+  ai_service:
+    build: ./ai_service
+    ports:
+      - "5001:5001"  
+    env_file:
+      - .env

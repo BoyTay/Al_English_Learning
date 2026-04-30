@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow border-0 rounded-4">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <i class="bi bi-person-circle fs-1 text-primary mb-2"></i>
+                    <h3 class="fw-bold">Đăng Nhập</h3>
+                </div>
+                <form action="{{ url_for('auth.login') }}" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label text-muted fw-bold">Tên tài khoản</label>
+                        <input type="text" name="username" class="form-control form-control-lg rounded-3" placeholder="Nhập username" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label text-muted fw-bold">Mật khẩu</label>
+                        <input type="password" name="password" class="form-control form-control-lg rounded-3" placeholder="*********" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg w-100 mb-3 rounded-pill fw-bold">Đăng Nhập</button>
+                    <div class="text-center mt-3">
+                        <small class="text-muted">Chưa có tài khoản? <a href="{{ url_for('auth.register') }}" class="text-decoration-none fw-bold">Tạo ngay</a></small>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

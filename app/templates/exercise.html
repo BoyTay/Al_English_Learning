@@ -1,0 +1,298 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-4">
+    <div class="col-lg-8">
+        <div class="card shadow-lg border-0 rounded-4 overflow-hidden mb-5">
+            <div class="card-header bg-primary px-5 py-4 border-0" style="background: linear-gradient(135deg, #0d6efd, #0b5ed7);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="text-white">
+                        <h3 class="mb-0 fw-bold"><i class="bi bi-stars"></i> Bài tập Sinh bởi AI</h3>
+                        <p class="mb-0 mt-2 opacity-75 fs-5">Chủ đề huấn luyện: <span class="badge bg-light text-primary fw-bold px-3 ms-2">{{ topic_name }}</span></p>
+                        <p class="mb-0 mt-2 opacity-75">Loại chủ đề: <span class="badge bg-info text-dark">{{ topic_type }}</span></p>
+                        {% if subtopic_focus and subtopic_focus != topic_name %}
+                        <p class="mb-0 mt-2 opacity-75">Lộ trình đã chọn: <span class="badge bg-light text-dark">{{ subtopic_focus }}</span></p>
+                        {% endif %}
+                    </div>
+                    <i class="bi bi-robot display-4 text-white opacity-25"></i>
+                </div>
+            </div>
+            
+            <div class="card-body p-4 p-md-5">
+                {% if exercise_data and exercise_data.questions %}
+                    <form id="exerciseForm">
+                        <input type="hidden" id="topicId" value="{{ topic_id or '' }}">
+                        <input type="hidden" id="topicName" value="{{ topic_name }}">
+                        <script>
+                            // Lưu raw json lên front
+                            const exerciseRawData = {{ exercise_data|tojson }};
+                        </script>
+                        
+                        {% for q in exercise_data.questions %}
+                        {% set outer_loop_index = loop.index0 %}
+                        <div class="question-container mb-5 pb-4 border-bottom">
+                            <h4 class="fw-bold mb-4 d-flex" style="line-height: 1.5;">
+                                <span class="badge bg-primary rounded-circle me-3 d-flex align-items-center justify-content-center fs-5 shadow-sm" style="width:40px;height:40px">{{ loop.index }}</span>
+                                {{ q.question }}
+                            </h4>
+                            
+                            <div class="options-container ps-2 ps-md-5">
+                                {% for opt in q.options %}
+                                <div class="form-check mb-3 custom-radio">
+                                    <input class="form-check-input shadow-sm" type="radio" name="q_{{ outer_loop_index }}" id="q_{{ outer_loop_index }}_{{ loop.index0 }}" value="{{ opt }}">
+                                    <label class="form-check-label fs-5 bg-light px-4 py-3 rounded-3 w-100" for="q_{{ outer_loop_index }}_{{ loop.index0 }}">
+                                        {{ opt }}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <!-- Box Feedback -->
+                            <div class="feedback-box mt-4 ps-2 ps-md-5 d-none animate-feedback" id="feedback_{{ loop.index0 }}">
+                                <div class="alert border-0 p-4 rounded-4 shadow-sm feedback-alert">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="bi bi-check-circle-fill text-success fs-3 me-2 d-none correct-icon"></i>
+                                        <i class="bi bi-x-circle-fill text-danger fs-3 me-2 d-none wrong-icon"></i>
+                                        <span class="fs-5 feedback-text"></span>
+                                    </div>
+                                    <p class="mb-0 mt-3 fs-6 d-flex"><i class="bi bi-info-circle me-2 mt-1"></i> <span class="explanation-text">{{ q.explanation }}</span></p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        
+                        <div class="d-grid mt-5 pt-3">
+                            <button type="button" id="submitBtn" class="btn btn-primary btn-lg rounded-pill fw-bold py-3 shadow-lg fs-4" onclick="submitAnswers()">Nộp Bài Và Chấm Điểm</button>
+                        </div>
+                        
+                        <!-- Kết quả Popup -->
+                        <div id="resultArea" class="mt-4 p-5 bg-light rounded-4 text-center d-none border">
+                            <i class="bi bi-trophy-fill text-warning" style="font-size: 4rem;"></i>
+                            <h2 id="scoreText" class="fw-bold display-5 my-3"></h2>
+                            <p class="text-muted fs-5 mb-5" id="sm2UpdateText"></p>
+                            <div class="d-flex justify-content-center gap-3">
+                                <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-primary btn-lg rounded-pill px-4 fw-bold shadow-sm">Trở về Dashboard</a>
+                                <a href="{{ url_for('exercises.new_exercise') }}" class="btn btn-success btn-lg rounded-pill px-4 fw-bold shadow-sm"><i class="bi bi-arrow-repeat me-1"></i> Sinh bài AI mới</a>
+                            </div>
+                        </div>
+                    </form>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-emoji-frown display-1 text-danger mb-4"></i>
+                        <h3 class="fw-bold">Lỗi truy xuất dữ liệu!</h3>
+                        <p class="text-muted fs-5">API của LLM hiện tải không thể sinh content phù hợp hoặc đã bị overload. Vui lòng thử lại sau.</p>
+                        <a href="{{ url_for('exercises.new_exercise') }}" class="btn btn-primary btn-lg rounded-pill mt-4 px-5">Tải Lại Bằng AI</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function submitAnswers() {
+        let allAnswered = true;
+        let score = 0;
+        let total = exerciseRawData.questions.length;
+        const userAnswers = [];
+        
+        for (let i = 0; i < total; i++) {
+            const selected = document.querySelector(`input[name="q_${i}"]:checked`);
+            if (!selected) {
+                allAnswered = false;
+                break;
+            }
+        }
+        
+        if (!allAnswered) {
+            alert("Vui lòng trả lời đù số lượng!");
+            return;
+        }
+        
+        document.getElementById('submitBtn').disabled = true;
+        document.getElementById('submitBtn').classList.add('d-none');
+        
+        for (let i = 0; i < total; i++) {
+            const selectedEl = document.querySelector(`input[name="q_${i}"]:checked`);
+            const selected = selectedEl.value;
+            userAnswers.push(selected);
+            const correctAns = exerciseRawData.questions[i].answer;
+            const feedbackBox = document.getElementById(`feedback_${i}`);
+            const alertBox = feedbackBox.querySelector('.feedback-alert');
+            const feedbackText = feedbackBox.querySelector('.feedback-text');
+            
+            feedbackBox.classList.remove('d-none'); 
+            
+            if (selected === correctAns) {
+                score++;
+                feedbackBox.querySelector('.correct-icon').classList.remove('d-none');
+                
+                // Đáp án chọn ĐÚNG - màu xanh đậm với icon
+                selectedEl.nextElementSibling.classList.remove('bg-light');
+                selectedEl.nextElementSibling.classList.add('fw-bold');
+                selectedEl.nextElementSibling.style.cssText = `
+                    background-color: #28a745 !important;
+                    color: #fff !important;
+                    border: 4px solid #1e7e34 !important;
+                    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4) !important;
+                    font-size: 1.15rem !important;
+                `;
+                
+                // Thêm icon ✓ to và rõ
+                if (!selectedEl.nextElementSibling.querySelector('.answer-icon')) {
+                    const icon = document.createElement('span');
+                    icon.className = 'answer-icon';
+                    icon.innerHTML = '✓ ';
+                    icon.style.fontSize = '1.5rem';
+                    icon.style.marginRight = '8px';
+                    icon.style.fontWeight = 'bold';
+                    selectedEl.nextElementSibling.prepend(icon);
+                }
+                
+                // Feedback box xanh
+                alertBox.style.backgroundColor = '#d4edda';
+                alertBox.style.border = '2px solid #28a745';
+                feedbackText.innerHTML = '<strong style="color: #155724; font-size: 1.2rem;">✓ Chính xác!</strong>';
+                feedbackBox.querySelector('.bi-info-circle').style.color = '#28a745';
+                feedbackBox.querySelector('.explanation-text').style.color = '#155724';
+            } else {
+                feedbackBox.querySelector('.wrong-icon').classList.remove('d-none');
+                
+                // Đáp án chọn SAI - nền đỏ nhạt với chữ đỏ đậm
+                selectedEl.nextElementSibling.classList.remove('bg-light');
+                selectedEl.nextElementSibling.classList.add('fw-bold');
+                selectedEl.nextElementSibling.style.cssText = `
+                    background-color: #f8d7da !important;
+                    color: #721c24 !important;
+                    border: 4px solid #dc3545 !important;
+                    box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4) !important;
+                    font-size: 1.15rem !important;
+                `;
+                
+                // Thêm icon ✗ to và rõ
+                if (!selectedEl.nextElementSibling.querySelector('.answer-icon')) {
+                    const icon = document.createElement('span');
+                    icon.className = 'answer-icon';
+                    icon.innerHTML = '✗ ';
+                    icon.style.fontSize = '1.5rem';
+                    icon.style.marginRight = '8px';
+                    icon.style.fontWeight = 'bold';
+                    icon.style.color = '#dc3545';
+                    selectedEl.nextElementSibling.prepend(icon);
+                }
+                
+                // Feedback box đỏ
+                alertBox.style.backgroundColor = '#f8d7da';
+                alertBox.style.border = '2px solid #dc3545';
+                feedbackText.innerHTML = `<strong style="color: #721c24; font-size: 1.2rem;">✗ Sai rồi!</strong><br><span style="color: #000; font-size: 1rem;">Đáp án đúng là: </span><strong style="color: #28a745; font-size: 1.15rem; background: #d4edda; padding: 4px 12px; border-radius: 6px; display: inline-block; margin-top: 8px;">${correctAns}</strong>`;
+                feedbackBox.querySelector('.bi-info-circle').style.color = '#dc3545';
+                feedbackBox.querySelector('.explanation-text').style.color = '#721c24';
+                
+                // Highlight đáp án ĐÚNG - màu xanh đậm rất rõ
+                document.querySelectorAll(`input[name="q_${i}"]`).forEach(el => {
+                    // So sánh để tìm đáp án đúng
+                    const optValue = el.value.trim();
+                    const optValueWithoutPrefix = optValue.includes('.') ? optValue.split('.')[1].trim() : optValue;
+                    const correctValue = correctAns.trim();
+                    const correctWithoutPrefix = correctValue.includes('.') ? correctValue.split('.')[1].trim() : correctValue;
+                    
+                    if (optValue === correctValue || 
+                        optValueWithoutPrefix === correctWithoutPrefix || 
+                        optValue === correctWithoutPrefix ||
+                        optValueWithoutPrefix === correctValue) {
+                        
+                        el.nextElementSibling.classList.remove('bg-light');
+                        el.nextElementSibling.classList.add('fw-bold');
+                        el.nextElementSibling.style.cssText = `
+                            background-color: #28a745 !important;
+                            color: #fff !important;
+                            border: 4px solid #1e7e34 !important;
+                            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.5) !important;
+                            font-size: 1.15rem !important;
+                        `;
+                        
+                        // Thêm icon ✓ và label "Đúng"
+                        if (!el.nextElementSibling.querySelector('.answer-icon')) {
+                            const icon = document.createElement('span');
+                            icon.className = 'answer-icon';
+                            icon.innerHTML = '✓ ';
+                            icon.style.fontSize = '1.5rem';
+                            icon.style.marginRight = '8px';
+                            icon.style.fontWeight = 'bold';
+                            el.nextElementSibling.prepend(icon);
+                            
+                            const badge = document.createElement('span');
+                            badge.className = 'badge bg-light text-success ms-2';
+                            badge.textContent = 'Đáp án đúng';
+                            badge.style.fontSize = '0.75rem';
+                            badge.style.verticalAlign = 'middle';
+                            el.nextElementSibling.appendChild(badge);
+                        }
+                    } else if (el !== selectedEl) {
+                        // Làm mờ các đáp án không liên quan
+                        el.nextElementSibling.style.opacity = '0.4';
+                    }
+                });
+            }
+            
+            document.querySelectorAll(`input[name="q_${i}"]`).forEach(el => el.disabled = true);
+        }
+        
+        const topicId = document.getElementById('topicId').value;
+        const topicName = document.getElementById('topicName').value;
+        
+        fetch("{{ url_for('exercises.submit_exercise') }}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                topic_id: topicId,
+                topic_name: topicName,
+                score: score,
+                total: total,
+                exercise_data: exerciseRawData,
+                user_answers: userAnswers
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const resultArea = document.getElementById('resultArea');
+                resultArea.classList.remove('d-none');
+                
+                const scoreText = document.getElementById('scoreText');
+                const isGood = score >= (total * 0.7);
+                scoreText.innerHTML = `Đạt <span class="${isGood ? 'text-success' : 'text-danger'}">${score}/${total}</span> điểm!`;
+                
+                let warningText = '';
+                if (data.threshold_exceeded) {
+                    warningText = `<br><span class="text-danger">Tỉ lệ lỗi đang vượt ngưỡng ${(data.threshold * 100).toFixed(0)}%. Hệ thống sẽ ưu tiên đề xuất ôn tập chủ đề này.</span>`;
+                }
+                document.getElementById('sm2UpdateText').innerHTML = `Hệ thống đã lưu lại tiến trình điểm yếu. Nhịp điệu ôn lịch tiếp theo: <strong class="text-dark">${data.next_review}</strong>${warningText}`;
+            }
+        });
+    }
+</script>
+<style>
+.animate-feedback {
+    animation: slideDown 0.4s ease-out forwards;
+}
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Force màu chữ cho các label option */
+.form-check-label {
+    color: #495057 !important;
+    transition: all 0.3s ease;
+}
+
+/* Override Bootstrap default colors */
+.form-check-label.bg-light {
+    color: #212529 !important;
+}
+</style>
+{% endblock %}

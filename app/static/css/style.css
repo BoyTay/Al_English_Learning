@@ -1,0 +1,147 @@
+/* app/static/css/style.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f4f6fa;
+    color: #333;
+}
+
+/* Navbar */
+.app-navbar {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: saturate(130%);
+}
+
+.app-navbar .container {
+    min-height: 62px;
+}
+
+.app-brand {
+    letter-spacing: 0.2px;
+    color: #ffffff !important;
+}
+
+.app-nav-link {
+    color: rgba(255, 255, 255, 0.88) !important;
+    opacity: 1;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 0.5rem 0.85rem !important;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.app-nav-link:hover,
+.app-nav-link:focus {
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.app-nav-link.active {
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+.app-nav-cta {
+    color: #0d6efd !important;
+    background-color: #f8f9fa !important;
+    border: 1px solid rgba(13, 110, 253, 0.18);
+    padding-left: 1.1rem !important;
+    padding-right: 1.1rem !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.app-navbar .navbar-nav .nav-link.app-nav-cta,
+.app-navbar .navbar-nav .nav-link.app-nav-cta:visited {
+    color: #0d6efd !important;
+}
+
+.app-nav-cta:hover,
+.app-nav-cta:focus {
+    color: #0b5ed7 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 0.45rem 1.1rem rgba(0, 0, 0, 0.16) !important;
+}
+
+.app-nav-cta.active {
+    color: #0a58ca !important;
+    box-shadow: 0 0.45rem 1.1rem rgba(0, 0, 0, 0.16) !important;
+}
+
+@media (max-width: 991.98px) {
+    .app-navbar .navbar-nav {
+        gap: 0.25rem;
+        padding-top: 0.6rem;
+    }
+
+    .app-navbar .nav-item.ms-3,
+    .app-navbar .nav-link.ms-3,
+    .app-navbar .nav-link.ms-2 {
+        margin-left: 0 !important;
+    }
+}
+
+.table th {
+    font-weight: 600;
+}
+
+/* Custom Checkbox as Radio Options */
+.custom-radio {
+    position: relative;
+    padding-left: 0;
+}
+
+.custom-radio .form-check-input {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    height: 0;
+    width: 0;
+}
+
+.custom-radio .form-check-label {
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.custom-radio .form-check-label:hover {
+    background-color: #e9ecef !important;
+}
+
+.custom-radio .form-check-input:checked ~ .form-check-label {
+    background-color: #e6f2ff !important;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+    font-weight: 600;
+    color: #084298;
+}
+
+.custom-radio .form-check-input:disabled ~ .form-check-label {
+    opacity: 0.8;
+    cursor: not-allowed;
+}
+
+.card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.shadow-lg {
+    box-shadow: 0 1rem 3rem rgba(0,0,0,.08)!important;
+}
+
+.question-container {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

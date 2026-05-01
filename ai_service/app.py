@@ -124,6 +124,461 @@ Format JSON bắt buộc:
             print(f"================================================\n", flush=True)
             return jsonify({"error": str(e), "message": "Failed to generate topic catalog from Gemini."}), 500
 
+    if request_type == 'writing_prompt_generation':
+        date_key = (data.get('date_key') or '').strip()
+        prompt = f"""
+Role: You are an English writing coach.
+Task: Create one practical daily writing prompt.
+Context date: {date_key or 'today'}.
+Requirements:
+- Return strict JSON only.
+- No markdown and no explanation outside JSON.
+- Keep topic concise and practical for A2-B1 learners.
+- Instructions should target 120-180 words.
+- sample_outline should have 3-4 short bullets.
+
+Required JSON format:
+{{
+  "topic": "...",
+  "instructions": "...",
+  "sample_outline": ["...", "...", "..."]
+}}
+"""
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    response_mime_type="application/json",
+                )
+            )
+
+            text = response.text.strip()
+            if text.startswith('```json'):
+                text = text[7:]
+            if text.startswith('```'):
+                text = text[3:]
+            if text.endswith('```'):
+                text = text[:-3]
+
+            result = json.loads(text.strip())
+            return jsonify(result)
+        except ClientError as e:
+            error_text = str(e)
+            if "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
+                return jsonify({
+                    "error": error_text,
+                    "message": "Gemini quota exhausted."
+                }), 429
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": error_text, "message": "Failed to generate writing prompt."}), 500
+        except Exception as e:
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": str(e), "message": "Failed to generate writing prompt."}), 500
+
+    if request_type == 'writing_evaluation':
+        user_text = (data.get('user_text') or '').strip()
+        topic = (data.get('topic') or 'General writing').strip()
+        instructions = (data.get('instructions') or '').strip()
+        if not user_text:
+            return jsonify({"error": "user_text is required"}), 400
+
+        prompt = f"""
+Role: You are an English writing evaluator.
+Task: Evaluate the learner text and provide actionable feedback.
+Topic: {topic}
+Instructions: {instructions}
+Learner text:
+\"\"\"
+{user_text}
+\"\"\"
+
+Requirements:
+- Return strict JSON only.
+- No markdown and no explanation outside JSON.
+- Score must be from 0 to 10.
+- corrected_text must preserve original idea but improve grammar and naturalness.
+- strengths and improvement_points each contain 2-5 concise items.
+- error_tags must be short lowercase tags (e.g. tense, articles, prepositions, word_choice, agreement, punctuation).
+
+Required JSON format:
+{{
+  "score": 0,
+  "feedback_summary": "...",
+  "corrected_text": "...",
+  "strengths": ["...", "..."],
+  "improvement_points": ["...", "..."],
+  "error_tags": ["...", "..."]
+}}
+"""
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    response_mime_type="application/json",
+                )
+            )
+
+            text = response.text.strip()
+            if text.startswith('```json'):
+                text = text[7:]
+            if text.startswith('```'):
+                text = text[3:]
+            if text.endswith('```'):
+                text = text[:-3]
+
+            result = json.loads(text.strip())
+            return jsonify(result)
+        except ClientError as e:
+            error_text = str(e)
+            if "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
+                return jsonify({
+                    "error": error_text,
+                    "message": "Gemini quota exhausted."
+                }), 429
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": error_text, "message": "Failed to evaluate writing."}), 500
+        except Exception as e:
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": str(e), "message": "Failed to evaluate writing."}), 500
+
+    if request_type == 'flashcard_generation':
+        topic = (data.get('topic') or 'Daily vocabulary').strip()
+        card_count = int(data.get('card_count', 10))
+        card_count = max(3, min(20, card_count))
+        prompt = f"""
+Role: You are an English vocabulary coach.
+Task: Generate smart flashcards for the learner.
+Topic focus: {topic}
+Requirements:
+- Return strict JSON only.
+- No markdown and no explanation outside JSON.
+- Create exactly {card_count} cards.
+- Keep terms practical for A2-B1 learners.
+- definition must be short and clear.
+- example_sentence should use natural daily English.
+- pronunciation_hint should be easy to read for Vietnamese learners.
+- image_hint should be a short phrase describing a simple visual idea.
+
+Required JSON format:
+{{
+  "cards": [
+    {{
+      "term": "...",
+      "definition": "...",
+      "example_sentence": "...",
+      "pronunciation_hint": "...",
+      "image_hint": "..."
+    }}
+  ]
+}}
+"""
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    response_mime_type="application/json",
+                )
+            )
+
+            text = response.text.strip()
+            if text.startswith('```json'):
+                text = text[7:]
+            if text.startswith('```'):
+                text = text[3:]
+            if text.endswith('```'):
+                text = text[:-3]
+
+            result = json.loads(text.strip())
+            return jsonify(result)
+        except ClientError as e:
+            error_text = str(e)
+            if "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
+                return jsonify({
+                    "error": error_text,
+                    "message": "Gemini quota exhausted."
+                }), 429
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": error_text, "message": "Failed to generate flashcards."}), 500
+        except Exception as e:
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": str(e), "message": "Failed to generate flashcards."}), 500
+
+    if request_type == 'speaking_prompt_generation':
+        prompt_count = int(data.get('prompt_count', 6))
+        prompt_count = max(3, min(12, prompt_count))
+        prompt = f"""
+Role: You are an English speaking coach.
+Task: Create short speaking/listening practice prompts for learners.
+Requirements:
+- Return strict JSON only.
+- No markdown and no explanation outside JSON.
+- Create exactly {prompt_count} prompts.
+- Each prompt must have topic, sentence, and difficulty.
+- sentence should be practical and natural daily English.
+- difficulty must be one of: easy, medium, hard.
+
+Required JSON format:
+{{
+  "prompts": [
+    {{
+      "topic": "...",
+      "sentence": "...",
+      "difficulty": "easy|medium|hard"
+    }}
+  ]
+}}
+"""
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    response_mime_type="application/json",
+                )
+            )
+
+            text = response.text.strip()
+            if text.startswith('```json'):
+                text = text[7:]
+            if text.startswith('```'):
+                text = text[3:]
+            if text.endswith('```'):
+                text = text[:-3]
+
+            result = json.loads(text.strip())
+            return jsonify(result)
+        except ClientError as e:
+            error_text = str(e)
+            if "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
+                return jsonify({
+                    "error": error_text,
+                    "message": "Gemini quota exhausted."
+                }), 429
+            if "UNAVAILABLE" in error_text:
+                return jsonify({
+                    "error": error_text,
+                    "message": "Gemini is temporarily unavailable."
+                }), 503
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": error_text, "message": "Failed to generate speaking prompts."}), 500
+        except Exception as e:
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": str(e), "message": "Failed to generate speaking prompts."}), 500
+
+    if request_type == 'answer_explanation':
+        question = (data.get('question') or '').strip()
+        options = data.get('options') if isinstance(data.get('options'), list) else []
+        options_text = ", ".join([str(o) for o in options])
+        correct_answer = (data.get('correct_answer') or '').strip()
+        user_answer = (data.get('user_answer') or '').strip()
+        topic = (data.get('topic') or 'General English').strip()
+        question_type = (data.get('question_type') or 'grammar').strip().lower()
+
+        prompt = f"""
+Role: You are a patient English tutor.
+Task: Explain why the learner's answer is wrong in simple Vietnamese, and give a memory tip.
+Context:
+- Topic: {topic}
+- Question type: {question_type}
+- Question: {question}
+- Options: {options_text}
+- Correct answer: {correct_answer}
+- Learner answer: {user_answer}
+
+Return strict JSON only:
+{{
+  "summary": "...",
+  "why_wrong": "...",
+  "memory_tip": "..."
+}}
+"""
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.4,
+                    response_mime_type="application/json",
+                )
+            )
+            text = response.text.strip()
+            if text.startswith('```json'):
+                text = text[7:]
+            if text.startswith('```'):
+                text = text[3:]
+            if text.endswith('```'):
+                text = text[:-3]
+            result = json.loads(text.strip())
+            return jsonify(result)
+        except ClientError as e:
+            error_text = str(e)
+            if "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
+                return jsonify({"error": error_text, "message": "Gemini quota exhausted."}), 429
+            if "UNAVAILABLE" in error_text:
+                return jsonify({"error": error_text, "message": "Gemini is temporarily unavailable."}), 503
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": error_text, "message": "Failed to explain answer."}), 500
+        except Exception as e:
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": str(e), "message": "Failed to explain answer."}), 500
+
+    if request_type == 'tutor_chat':
+        user_message = (data.get('user_message') or '').strip()
+        history = data.get('message_history') if isinstance(data.get('message_history'), list) else []
+        if not user_message:
+            return jsonify({"error": "user_message is required"}), 400
+
+        history_lines = []
+        for msg in history[-20:]:
+            if not isinstance(msg, dict):
+                continue
+            role = (msg.get('role') or 'user').strip().lower()
+            content = (msg.get('content') or '').strip()
+            if content:
+                history_lines.append(f"{role}: {content}")
+        history_text = "\n".join(history_lines)
+
+        prompt = f"""
+Role: You are an English conversation partner and tutor.
+Task: Reply naturally to the learner in English, and gently point out major mistakes.
+Conversation history:
+{history_text}
+Learner message:
+{user_message}
+
+Return strict JSON only:
+{{
+  "assistant_reply": "...",
+  "corrections": ["short correction note 1", "short correction note 2"],
+  "error_tags": ["tense", "word_choice"]
+}}
+"""
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.6,
+                    response_mime_type="application/json",
+                )
+            )
+            text = response.text.strip()
+            if text.startswith('```json'):
+                text = text[7:]
+            if text.startswith('```'):
+                text = text[3:]
+            if text.endswith('```'):
+                text = text[:-3]
+            result = json.loads(text.strip())
+            return jsonify(result)
+        except ClientError as e:
+            error_text = str(e)
+            if "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
+                return jsonify({"error": error_text, "message": "Gemini quota exhausted."}), 429
+            if "UNAVAILABLE" in error_text:
+                return jsonify({"error": error_text, "message": "Gemini is temporarily unavailable."}), 503
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": error_text, "message": "Failed to chat with tutor."}), 500
+        except Exception as e:
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": str(e), "message": "Failed to chat with tutor."}), 500
+
+    if request_type == 'tutor_chat_summary':
+        history = data.get('message_history') if isinstance(data.get('message_history'), list) else []
+        history_lines = []
+        for msg in history[-40:]:
+            if not isinstance(msg, dict):
+                continue
+            role = (msg.get('role') or 'user').strip().lower()
+            content = (msg.get('content') or '').strip()
+            if content:
+                history_lines.append(f"{role}: {content}")
+        history_text = "\n".join(history_lines)
+
+        prompt = f"""
+Role: You are an English tutor.
+Task: Summarize learner mistakes from this chat and provide compact error tags.
+Chat history:
+{history_text}
+
+Return strict JSON only:
+{{
+  "summary": "...",
+  "key_errors": ["tense", "articles", "word_choice"]
+}}
+"""
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    response_mime_type="application/json",
+                )
+            )
+            text = response.text.strip()
+            if text.startswith('```json'):
+                text = text[7:]
+            if text.startswith('```'):
+                text = text[3:]
+            if text.endswith('```'):
+                text = text[:-3]
+            result = json.loads(text.strip())
+            return jsonify(result)
+        except ClientError as e:
+            error_text = str(e)
+            if "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
+                return jsonify({"error": error_text, "message": "Gemini quota exhausted."}), 429
+            if "UNAVAILABLE" in error_text:
+                return jsonify({"error": error_text, "message": "Gemini is temporarily unavailable."}), 503
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": error_text, "message": "Failed to summarize chat."}), 500
+        except Exception as e:
+            print(f"\n================ LỖI TẠI AI MICROSERVICE ================", flush=True)
+            traceback.print_exc()
+            print(f"================================================\n", flush=True)
+            return jsonify({"error": str(e), "message": "Failed to summarize chat."}), 500
+
     if request_type == 'roadmap_generation':
         prompt = """
 Role: Bạn là AI thiết kế lộ trình học tiếng Anh.

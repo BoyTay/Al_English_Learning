@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row mt-4 g-3">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                        <h4 class="fw-bold mb-1"><i class="bi bi-pencil-square text-primary me-2"></i>Luyện viết mỗi ngày</h4>
+                        <p class="text-muted mb-0">Đề bài hôm nay: <strong>{{ prompt.topic }}</strong></p>
+                    </div>
+                    <a href="{{ url_for('writing.practice', refresh_prompt=1) }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                        <i class="bi bi-arrow-repeat me-1"></i>Đổi đề
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <div class="alert alert-light border mb-4">
+                    <div class="fw-bold mb-2">Yêu cầu</div>
+                    <div>{{ prompt.instructions }}</div>
+                    {% if prompt.sample_outline %}
+                    <hr>
+                    <div class="fw-bold mb-2">Gợi ý dàn ý</div>
+                    <ul class="mb-0">
+                        {% for item in prompt.sample_outline %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+                <form method="post" action="{{ url_for('writing.submit') }}">
+                    <input type="hidden" name="prompt_id" value="{{ prompt.id }}">
+                    <label for="essayText" class="form-label fw-bold">Bài viết của bạn</label>
+                    <textarea id="essayText" name="essay_text" class="form-control" rows="10" minlength="30" required placeholder="Viết đoạn văn của bạn tại đây..."></textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <small class="text-muted">Gợi ý: 120-180 từ để AI đánh giá chính xác hơn.</small>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">
+                            <i class="bi bi-send-check me-1"></i>Chấm bài
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-exclamation-diamond text-danger me-2"></i>Lỗi hay gặp gần đây</h6>
+                {% if top_error_tags %}
+                <div class="d-flex flex-wrap gap-2">
+                    {% for tag, count in top_error_tags %}
+                    <span class="badge rounded-pill text-bg-light border">{{ tag }} ({{ count }})</span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">Chưa có dữ liệu lỗi. Hãy nộp bài đầu tiên để bắt đầu theo dõi.</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>Bài viết gần đây</h6>
+                    <a href="{{ url_for('writing.history') }}" class="small text-decoration-none">Xem tất cả</a>
+                </div>
+                {% for item in recent_submissions %}
+                <div class="border rounded-3 p-3 mb-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="badge text-bg-primary">Điểm {{ item.score|round(1) }}/10</span>
+                        <small class="text-muted">{{ item.created_at.strftime('%d/%m %H:%M') }}</small>
+                    </div>
+                    <div class="small text-muted mt-2">{{ item.feedback_summary }}</div>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">Bạn chưa có bài viết nào.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

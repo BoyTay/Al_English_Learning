@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row mt-4 g-3">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
+                <h4 class="fw-bold mb-1"><i class="bi bi-magic text-primary me-2"></i>Flashcard thông minh</h4>
+                <p class="text-muted mb-0">Sinh bộ từ vựng bằng AI và ôn theo lịch SM-2.</p>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="{{ url_for('flashcards.generate') }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Chủ đề từ vựng</label>
+                        <input type="text" class="form-control" name="topic" placeholder="Ví dụ: Travel, Work, Daily life" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Số thẻ</label>
+                        <input type="number" class="form-control" name="card_count" value="10" min="3" max="20">
+                    </div>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">
+                        <i class="bi bi-stars me-1"></i>Sinh flashcard
+                    </button>
+                    <a href="{{ url_for('flashcards.review') }}" class="btn btn-outline-primary rounded-pill px-4 ms-2">Ôn thẻ đến hạn</a>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-3"><i class="bi bi-stack text-primary me-2"></i>Bộ flashcard gần đây</h5>
+                {% for item in set_summaries %}
+                <div class="border rounded-3 p-3 mb-2">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <div class="fw-bold">{{ item.set.title }}</div>
+                            <small class="text-muted">Tổng thẻ: {{ item.card_count }} • Đến hạn: {{ item.due_count }}</small>
+                        </div>
+                        <a href="{{ url_for('flashcards.review', set_id=item.set.id) }}" class="btn btn-sm btn-outline-primary rounded-pill">Ôn ngay</a>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Chưa có bộ flashcard nào.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

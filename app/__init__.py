@@ -28,10 +28,18 @@ def create_app(config_class=Config):
     from app.routes.auth import auth_bp
     from app.routes.main import main_bp
     from app.routes.exercises import exercises_bp
+    from app.routes.writing import writing_bp
+    from app.routes.flashcards import flashcards_bp
+    from app.routes.speaking import speaking_bp
+    from app.routes.chat import chat_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(exercises_bp, url_prefix='/exercises')
+    app.register_blueprint(writing_bp)
+    app.register_blueprint(flashcards_bp)
+    app.register_blueprint(speaking_bp)
+    app.register_blueprint(chat_bp)
 
     # Start background prefetcher only when explicitly enabled.
     if os.environ.get('ENABLE_EXERCISE_PREFETCH', 'false').lower() == 'true':
@@ -49,6 +57,7 @@ def create_app(config_class=Config):
         models.ensure_topic_progress_schema()
         models.ensure_subtopic_progress_schema()
         models.ensure_roadmap_cache_schema()
+        models.seed_default_badges()
         if app.config.get('RESET_TOPICS_ON_STARTUP', False):
             models.refresh_topics_from_ai(
                 wipe_learning_data=app.config.get('WIPE_LEARNING_DATA_ON_TOPIC_RESET', False)

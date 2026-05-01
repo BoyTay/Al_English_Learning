@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row mt-4 g-3">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
+                <h4 class="fw-bold mb-1"><i class="bi bi-mic text-primary me-2"></i>Luyện nghe & phát âm</h4>
+                <p class="text-muted mb-0">Nghe câu mẫu, đọc lại bằng mic, và xem mức khớp.</p>
+            </div>
+            <div class="card-body p-4">
+                <div class="alert alert-light border">
+                    Trình duyệt hỗ trợ tốt nhất: Chrome/Edge mới. Nếu không hỗ trợ nhận diện giọng nói, bạn vẫn có thể nghe và luyện thủ công.
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-outline-primary rounded-pill" id="speakBtn">
+                        <i class="bi bi-volume-up me-1"></i>Đọc câu mẫu
+                    </button>
+                    <button type="button" class="btn btn-primary rounded-pill" id="listenBtn">
+                        <i class="bi bi-mic-fill me-1"></i>Bắt đầu nói
+                    </button>
+                </div>
+                <div class="mt-3 small text-muted" id="statusText">Chọn một câu ở danh sách bên phải để bắt đầu.</div>
+                <hr>
+                <div class="mb-2 fw-bold">Kết quả nhận diện</div>
+                <div class="p-3 rounded-3 bg-light border" id="recognizedText">...</div>
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="small">Mức khớp</span>
+                        <span class="small fw-bold" id="scoreText">0%</span>
+                    </div>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar" id="scoreBar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-chat-quote text-primary me-2"></i>Câu luyện tập hôm nay</h5>
+                    <div class="d-flex gap-2">
+                        <a href="{{ url_for('speaking.practice', new=1) }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                            <i class="bi bi-plus-lg me-1"></i>Đề mới
+                        </a>
+                    </div>
+                </div>
+                <div class="small text-muted mb-3">Đang hiển thị {{ prompt_count }} câu.</div>
+                <div class="list-group" id="promptList">
+                    {% for p in prompts %}
+                    <button type="button"
+                            class="list-group-item list-group-item-action prompt-item {% if loop.first %}active{% endif %}"
+                            data-topic="{{ p.topic }}"
+                            data-sentence="{{ p.sentence }}"
+                            data-difficulty="{{ p.difficulty }}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="fw-bold">{{ p.topic }}</div>
+                            <span class="badge text-bg-light border">{{ p.difficulty }}</span>
+                        </div>
+                        <div class="small mt-1">{{ p.sentence }}</div>
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const items = Array.from(document.querySelectorAll('.prompt-item'));
+    const speakBtn = document.getElementById('speakBtn');
+    const listenBtn = document.getElementById('listenBtn');
+    const statusText = document.getElementById('statusText');
+    const recognizedText = document.getElementById('recognizedText');
+    const scoreText = document.getElementById('scoreText');
+    const scoreBar = document.getElementById('scoreBar');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let selectedSentence = '';
+
+    function normalize(str) {
+        return (str || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s']/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function calcScore(expected, actual) {
+        const e = normalize(expected).split(' ').filter(Boolean);
+        const a = normalize(actual).split(' ').filter(Boolean);
+        if (!e.length || !a.length) return 0;
+        const expectedSet = new Set(e);
+        let matched = 0;
+        a.forEach(word => { if (expectedSet.has(word)) matched += 1; });
+        return Math.max(0, Math.min(100, Math.round((matched / e.length) * 100)));
+    }
+
+    function setSelected(item) {
+        items.forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        selectedSentence = item.dataset.sentence || '';
+        recognizedText.textContent = '...';
+        scoreText.textContent = '0%';
+        scoreBar.style.width = '0%';
+    }
+
+    items.forEach(item => {
+        item.addEventListener('click', () => setSelected(item));
+    });
+    if (items.length) setSelected(items[0]);
+
+    speakBtn.addEventListener('click', () => {
+        if (!selectedSentence) return;
+        if (!('speechSynthesis' in window)) {
+            statusText.textContent = 'Trình duyệt không hỗ trợ text-to-speech.';
+            return;
+        }
+        window.speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(selectedSentence);
+        utt.lang = 'en-US';
+        utt.rate = 0.92;
+        window.speechSynthesis.speak(utt);
+        statusText.textContent = 'Đang đọc câu mẫu...';
+    });
+
+    listenBtn.addEventListener('click', () => {
+        if (!selectedSentence) return;
+        if (!SpeechRecognition) {
+            statusText.textContent = 'Trình duyệt không hỗ trợ Speech Recognition.';
+            return;
+        }
+        if (recognition) recognition.abort();
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        statusText.textContent = 'Đang nghe... hãy đọc rõ câu mẫu.';
+        recognition.onresult = (event) => {
+            const transcript = event.results?.[0]?.[0]?.transcript || '';
+            recognizedText.textContent = transcript || '(không nhận diện được nội dung)';
+            const score = calcScore(selectedSentence, transcript);
+            scoreText.textContent = `${score}%`;
+            scoreBar.style.width = `${score}%`;
+            scoreBar.className = `progress-bar ${score >= 80 ? 'bg-success' : score >= 50 ? 'bg-warning' : 'bg-danger'}`;
+            statusText.textContent = 'Đã nhận diện xong.';
+        };
+        recognition.onerror = () => {
+            statusText.textContent = 'Không nhận diện được giọng nói. Hãy thử lại ở nơi yên tĩnh hơn.';
+        };
+        recognition.start();
+    });
+})();
+</script>
+{% endblock %}

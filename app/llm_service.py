@@ -2,25 +2,108 @@ import os
 import requests
 import time
 import json
+import re
+import math
+import random
+import threading
+from collections import defaultdict, deque
 from flask import current_app
 from requests.exceptions import RequestException
 
 # When AI service has repeated failures, skip network attempts for this cooldown
 _COOLDOWN_SECONDS = int(os.environ.get('AI_SERVICE_COOLDOWN', '60'))
+_MAX_QUOTA_COOLDOWN_SECONDS = int(os.environ.get('AI_SERVICE_MAX_QUOTA_COOLDOWN', '300'))
 _last_failure = 0.0
+_quota_cooldown_until = 0.0
 
 # Force using real AI service even during cooldown (set env FORCE_REAL_AI=true)
 _FORCE_REAL_AI = os.environ.get('FORCE_REAL_AI', 'false').lower() == 'true'
 # Number of retries for transient network errors
 _AI_RETRIES = int(os.environ.get('AI_SERVICE_RETRIES', '3'))
 _AI_BACKOFF = float(os.environ.get('AI_SERVICE_BACKOFF', '1'))
+_AI_TIMEOUT = int(os.environ.get('AI_SERVICE_TIMEOUT', '20'))
+
+_DEFAULT_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get('AI_RATE_LIMIT_WINDOW_SECONDS', '60'))
+_DEFAULT_RATE_LIMIT_MAX_REQUESTS = int(os.environ.get('AI_RATE_LIMIT_MAX_REQUESTS', '10'))
+_rate_limit_state: dict[str, deque[float]] = defaultdict(deque)
+_rate_limit_lock = threading.Lock()
+
+_response_cache: dict[str, tuple[float, dict | list]] = {}
+_response_cache_lock = threading.Lock()
 
 
-def _call_ai_service(payload: dict, fallback_factory, log_label: str):
-  global _last_failure
+def _extract_retry_delay_seconds(text: str) -> int | None:
+  if not text:
+    return None
+  patterns = [
+    r"retryDelay\\?['\"\\s:]*\\?['\"]?([0-9]+(?:\.[0-9]+)?)s['\"]?",
+    r"please\s+retry\s+in\s+([0-9]+(?:\.[0-9]+)?)s",
+  ]
+  for pattern in patterns:
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+      continue
+    try:
+      return max(1, int(math.ceil(float(match.group(1)))))
+    except (TypeError, ValueError):
+      continue
+  return None
+
+
+def _deep_clone_json_data(value):
+  try:
+    return json.loads(json.dumps(value, ensure_ascii=False))
+  except Exception:
+    return value
+
+
+def check_rate_limit(
+  *,
+  actor_key: str,
+  bucket: str,
+  max_requests: int | None = None,
+  window_seconds: int | None = None,
+) -> tuple[bool, int]:
+  max_r = int(max_requests or _DEFAULT_RATE_LIMIT_MAX_REQUESTS)
+  window_s = int(window_seconds or _DEFAULT_RATE_LIMIT_WINDOW_SECONDS)
+  now = time.time()
+  state_key = f"{bucket}::{actor_key}"
+  with _rate_limit_lock:
+    history = _rate_limit_state[state_key]
+    while history and (now - history[0]) > window_s:
+      history.popleft()
+    if len(history) >= max_r:
+      retry_after = max(1, int(math.ceil(window_s - (now - history[0]))))
+      return False, retry_after
+    history.append(now)
+  return True, 0
+
+
+def _call_ai_service(
+  payload: dict,
+  fallback_factory,
+  log_label: str,
+  *,
+  cache_ttl_seconds: int = 0,
+  cache_key_suffix: str | None = None,
+):
+  global _last_failure, _quota_cooldown_until
 
   api_url = os.environ.get('AI_SERVICE_URL', 'http://ai_service:5001/generate')
   secret_key = current_app.config.get('SECRET_KEY', '')
+  cache_key = None
+  if cache_ttl_seconds > 0:
+    normalized_payload = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    cache_key = f"{cache_key_suffix or log_label}::{normalized_payload}"
+    now = time.time()
+    with _response_cache_lock:
+      cached = _response_cache.get(cache_key)
+      if cached:
+        expires_at, cached_data = cached
+        if now < expires_at:
+          current_app.logger.warning("[llm_service] Cache hit for %s", log_label)
+          return _deep_clone_json_data(cached_data)
+        _response_cache.pop(cache_key, None)
 
   headers = {
     'X-API-KEY': secret_key,
@@ -28,22 +111,29 @@ def _call_ai_service(payload: dict, fallback_factory, log_label: str):
     'Host': 'localhost'
   }
 
+  now = time.time()
+  if _quota_cooldown_until and now < _quota_cooldown_until and not _FORCE_REAL_AI:
+    current_app.logger.warning(
+      "[llm_service] Quota cooldown active (%ss left), using fallback for %s",
+      int(_quota_cooldown_until - now),
+      log_label,
+    )
+    return fallback_factory()
+  if _last_failure and (now - _last_failure) < _COOLDOWN_SECONDS and not _FORCE_REAL_AI:
+    current_app.logger.warning("[llm_service] Cooldown active, using fallback for %s", log_label)
+    return fallback_factory()
+
   current_app.logger.warning(
     "[llm_service] Requesting ai_service url=%s payload=%s",
     api_url,
     json.dumps(payload, ensure_ascii=False),
   )
 
-  now = time.time()
-  if _last_failure and (now - _last_failure) < _COOLDOWN_SECONDS and not _FORCE_REAL_AI:
-    current_app.logger.warning("[llm_service] Cooldown active, using fallback for %s", log_label)
-    return fallback_factory()
-
   attempt = 0
   while attempt < max(1, _AI_RETRIES):
     attempt += 1
     try:
-      resp = requests.post(api_url, json=payload, headers=headers, timeout=10)
+      resp = requests.post(api_url, json=payload, headers=headers, timeout=_AI_TIMEOUT)
       preview = resp.text[:500].replace('\n', ' ')
       current_app.logger.warning(
         "[llm_service] ai_service response status=%s body=%s",
@@ -52,7 +142,11 @@ def _call_ai_service(payload: dict, fallback_factory, log_label: str):
       )
       resp.raise_for_status()
       _last_failure = 0.0
+      _quota_cooldown_until = 0.0
       data = resp.json()
+      if cache_key and cache_ttl_seconds > 0:
+        with _response_cache_lock:
+          _response_cache[cache_key] = (time.time() + cache_ttl_seconds, _deep_clone_json_data(data))
       return data
     except RequestException as e:
       errstr = str(e)
@@ -72,12 +166,36 @@ def _call_ai_service(payload: dict, fallback_factory, log_label: str):
         errstr,
         details,
       )
-      if status_code == 429:
-        _last_failure = time.time()
-        current_app.logger.warning(
-          "[llm_service] Received 429 from ai_service. Skipping retries and using cooldown %ss.",
-          _COOLDOWN_SECONDS,
-        )
+      if status_code in {429, 503}:
+        details_lower = details.lower()
+        if status_code == 429:
+          retry_seconds = _extract_retry_delay_seconds(details) or _extract_retry_delay_seconds(errstr)
+          quota_cooldown = _COOLDOWN_SECONDS
+          if retry_seconds is not None:
+            quota_cooldown = min(
+              _MAX_QUOTA_COOLDOWN_SECONDS,
+              max(5, retry_seconds + 2),
+            )
+          elif "generaterequestsperday" in details_lower or (
+            "quota exceeded for metric" in details_lower and "perday" in details_lower
+          ):
+            quota_cooldown = _MAX_QUOTA_COOLDOWN_SECONDS
+          _quota_cooldown_until = time.time() + quota_cooldown
+          _last_failure = 0.0
+          current_app.logger.warning(
+            "[llm_service] 429 quota detected. Applying %ss cooldown.",
+            int(quota_cooldown),
+          )
+          current_app.logger.warning(
+            "[llm_service] Received 429 from ai_service. Skipping retries and using quota cooldown."
+          )
+        else:
+          _last_failure = time.time()
+          current_app.logger.warning(
+            "[llm_service] Received %s from ai_service. Skipping retries and using cooldown %ss.",
+            status_code,
+            _COOLDOWN_SECONDS,
+          )
         break
       if attempt >= _AI_RETRIES:
         _last_failure = time.time()
@@ -154,7 +272,13 @@ def generate_topic_suggestions(count: int = 10) -> list[dict]:
         ]
       }
 
-    data = _call_ai_service(payload, _fallback_topics, "topic catalog")
+    data = _call_ai_service(
+      payload,
+      _fallback_topics,
+      "topic catalog",
+      cache_ttl_seconds=3600,
+      cache_key_suffix="topic-catalog",
+    )
     topics = data.get("topics", []) if isinstance(data, dict) else []
     normalized_topics: list[dict] = []
     for item in topics:
@@ -199,7 +323,13 @@ def generate_roadmap_suggestions() -> dict:
         ],
       }
 
-    data = _call_ai_service(payload, _fallback_roadmap, "roadmap")
+    data = _call_ai_service(
+      payload,
+      _fallback_roadmap,
+      "roadmap",
+      cache_ttl_seconds=900,
+      cache_key_suffix="roadmap",
+    )
     if not isinstance(data, dict):
       data = _fallback_roadmap()
 
@@ -228,6 +358,365 @@ def generate_roadmap_suggestions() -> dict:
     return {
       "grammar_roadmap": grammar_norm,
       "vocabulary_roadmap": vocab_norm,
+    }
+
+
+def generate_daily_writing_prompt(date_key: str) -> dict:
+    """Ask AI to generate a writing prompt of the day."""
+    payload = {
+      "request_type": "writing_prompt_generation",
+      "date_key": date_key,
+    }
+
+    def _fallback_prompt() -> dict:
+      return {
+        "source": "fallback",
+        "topic": "A lesson I learned this week",
+        "instructions": "Write 120-180 words. Describe the situation, what you learned, and how you will apply it.",
+        "sample_outline": [
+          "Opening: context and situation",
+          "Body: what happened and your reaction",
+          "Conclusion: specific lesson and next action",
+        ],
+      }
+
+    data = _call_ai_service(
+      payload,
+      _fallback_prompt,
+      "writing prompt",
+      cache_ttl_seconds=21600,
+      cache_key_suffix=f"writing-prompt::{date_key}",
+    )
+    if not isinstance(data, dict):
+      data = _fallback_prompt()
+
+    topic = (data.get("topic") or "").strip()
+    instructions = (data.get("instructions") or "").strip()
+    sample_outline = data.get("sample_outline") if isinstance(data.get("sample_outline"), list) else []
+    sample_outline = [str(item).strip() for item in sample_outline if str(item).strip()]
+    if not topic or not instructions:
+      fallback = _fallback_prompt()
+      topic = topic or fallback["topic"]
+      instructions = instructions or fallback["instructions"]
+      if not sample_outline:
+        sample_outline = fallback["sample_outline"]
+
+    return {
+      "topic": topic,
+      "instructions": instructions,
+      "sample_outline": sample_outline,
+    }
+
+
+def evaluate_writing_submission(topic: str, instructions: str, user_text: str) -> dict:
+    """Ask AI to evaluate a user's writing and return structured feedback."""
+    payload = {
+      "request_type": "writing_evaluation",
+      "topic": topic,
+      "instructions": instructions,
+      "user_text": user_text,
+    }
+
+    def _fallback_evaluation() -> dict:
+      return {
+        "source": "fallback",
+        "score": 6.0,
+        "feedback_summary": "Bai viet co y tuong ro, nhung can cai thien lien ket cau va chinh xac ngu phap.",
+        "corrected_text": user_text,
+        "strengths": ["Co cau truc doan van", "Bam sat chu de"],
+        "improvement_points": [
+          "Dung da dang lien tu hon",
+          "Kiem tra lai thi dong tu va danh-tu so it/so nhieu",
+        ],
+        "error_tags": ["tense", "articles", "word_choice"],
+      }
+
+    data = _call_ai_service(payload, _fallback_evaluation, "writing evaluation")
+    if not isinstance(data, dict):
+      data = _fallback_evaluation()
+
+    try:
+      score = float(data.get("score", 0.0))
+    except (TypeError, ValueError):
+      score = 0.0
+    score = max(0.0, min(10.0, score))
+
+    feedback_summary = (data.get("feedback_summary") or "").strip()
+    corrected_text = (data.get("corrected_text") or "").strip() or user_text
+    strengths = data.get("strengths") if isinstance(data.get("strengths"), list) else []
+    improvement_points = data.get("improvement_points") if isinstance(data.get("improvement_points"), list) else []
+    error_tags = data.get("error_tags") if isinstance(data.get("error_tags"), list) else []
+
+    strengths = [str(item).strip() for item in strengths if str(item).strip()]
+    improvement_points = [str(item).strip() for item in improvement_points if str(item).strip()]
+    error_tags = [str(item).strip().lower() for item in error_tags if str(item).strip()]
+
+    if not feedback_summary:
+      feedback_summary = _fallback_evaluation()["feedback_summary"]
+    if not strengths:
+      strengths = _fallback_evaluation()["strengths"]
+    if not improvement_points:
+      improvement_points = _fallback_evaluation()["improvement_points"]
+
+    return {
+      "score": score,
+      "feedback_summary": feedback_summary,
+      "corrected_text": corrected_text,
+      "strengths": strengths,
+      "improvement_points": improvement_points,
+      "error_tags": error_tags,
+    }
+
+
+def generate_flashcards(topic: str, count: int = 10) -> list[dict]:
+    """Ask AI to generate a vocabulary flashcard set."""
+    payload = {
+      "request_type": "flashcard_generation",
+      "topic": topic,
+      "card_count": int(count),
+    }
+
+    def _fallback_flashcards() -> dict:
+      return {
+        "source": "fallback",
+        "cards": [
+          {
+            "term": "adapt",
+            "definition": "to change your behavior to suit a new situation",
+            "example_sentence": "It took me a week to adapt to my new class schedule.",
+            "pronunciation_hint": "uh-DAPT",
+            "image_hint": "student adjusting to a new classroom",
+          },
+          {
+            "term": "deadline",
+            "definition": "the latest time by which something must be finished",
+            "example_sentence": "Our essay deadline is next Friday.",
+            "pronunciation_hint": "DED-line",
+            "image_hint": "calendar with a marked due date",
+          },
+          {
+            "term": "confident",
+            "definition": "feeling sure about your abilities",
+            "example_sentence": "She felt confident before her speaking test.",
+            "pronunciation_hint": "KON-fi-dent",
+            "image_hint": "student speaking with confidence",
+          },
+        ],
+      }
+
+    data = _call_ai_service(
+      payload,
+      _fallback_flashcards,
+      "flashcard generation",
+      cache_ttl_seconds=900,
+      cache_key_suffix=f"flashcards::{topic.lower()}::{int(count)}",
+    )
+    cards = data.get("cards", []) if isinstance(data, dict) else []
+    normalized_cards: list[dict] = []
+    for item in cards:
+      if not isinstance(item, dict):
+        continue
+      term = (item.get("term") or "").strip()
+      definition = (item.get("definition") or "").strip()
+      if not term or not definition:
+        continue
+      normalized_cards.append({
+        "term": term,
+        "definition": definition,
+        "example_sentence": (item.get("example_sentence") or "").strip(),
+        "pronunciation_hint": (item.get("pronunciation_hint") or "").strip(),
+        "image_hint": (item.get("image_hint") or "").strip(),
+      })
+
+    if not normalized_cards:
+      fallback = _fallback_flashcards()
+      normalized_cards = fallback["cards"]
+    return normalized_cards
+
+
+def generate_speaking_prompts(count: int = 6) -> list[dict]:
+    """Ask AI to generate short speaking/listening practice prompts."""
+    requested_count = max(3, min(24, int(count)))
+    payload = {
+      "request_type": "speaking_prompt_generation",
+      "prompt_count": requested_count,
+    }
+
+    def _fallback_prompts() -> dict:
+      return {
+        "source": "fallback",
+        "prompts": [
+          {
+            "topic": "Daily routine",
+            "sentence": "I usually wake up at six thirty and review English for fifteen minutes.",
+            "difficulty": "easy",
+          },
+          {
+            "topic": "Travel",
+            "sentence": "Could you tell me which platform the train to Da Nang departs from?",
+            "difficulty": "medium",
+          },
+          {
+            "topic": "Work meeting",
+            "sentence": "Let's summarize the key points before we decide the next action items.",
+            "difficulty": "medium",
+          },
+          {
+            "topic": "Health",
+            "sentence": "I have had a slight headache since yesterday, so I need to rest tonight.",
+            "difficulty": "medium",
+          },
+          {
+            "topic": "Shopping",
+            "sentence": "Do you have this jacket in a larger size, preferably in dark blue?",
+            "difficulty": "easy",
+          },
+          {
+            "topic": "Opinion",
+            "sentence": "In my opinion, learning by teaching others helps us remember information longer.",
+            "difficulty": "hard",
+          },
+        ],
+      }
+
+    data = _call_ai_service(
+      payload,
+      _fallback_prompts,
+      "speaking prompt generation",
+      cache_ttl_seconds=120,
+      cache_key_suffix=f"speaking-prompts::{requested_count}",
+    )
+    prompts = data.get("prompts", []) if isinstance(data, dict) else []
+    normalized_prompts: list[dict] = []
+    for item in prompts:
+      if not isinstance(item, dict):
+        continue
+      sentence = (item.get("sentence") or "").strip()
+      topic = (item.get("topic") or "").strip() or "General"
+      difficulty = (item.get("difficulty") or "medium").strip().lower()
+      if difficulty not in {"easy", "medium", "hard"}:
+        difficulty = "medium"
+      if not sentence:
+        continue
+      normalized_prompts.append({
+        "topic": topic,
+        "sentence": sentence,
+        "difficulty": difficulty,
+      })
+    if not normalized_prompts:
+      fallback_pool = _fallback_prompts()["prompts"][:]
+      random.shuffle(fallback_pool)
+      normalized_prompts = fallback_pool
+
+    fallback_pool = _fallback_prompts()["prompts"]
+    existing_sentences = {p.get("sentence", "") for p in normalized_prompts}
+    for candidate in fallback_pool:
+      if len(normalized_prompts) >= requested_count:
+        break
+      sentence = candidate.get("sentence", "")
+      if sentence in existing_sentences:
+        continue
+      normalized_prompts.append(candidate)
+      existing_sentences.add(sentence)
+
+    while len(normalized_prompts) < requested_count and fallback_pool:
+      normalized_prompts.append(fallback_pool[len(normalized_prompts) % len(fallback_pool)])
+
+    return normalized_prompts[:requested_count]
+
+
+def explain_wrong_answer(
+  question: str,
+  options: list[str],
+  correct_answer: str,
+  user_answer: str,
+  topic: str = "General English",
+  question_type: str = "grammar",
+) -> dict:
+    payload = {
+      "request_type": "answer_explanation",
+      "topic": topic,
+      "question_type": question_type,
+      "question": question,
+      "options": options,
+      "correct_answer": correct_answer,
+      "user_answer": user_answer,
+    }
+
+    def _fallback() -> dict:
+      return {
+        "summary": "Ban chon dap an chua dung vi chua phu hop ngu canh cau.",
+        "why_wrong": "Dap an ban chon khong dung voi thi/ngu nghia ma cau yeu cau.",
+        "memory_tip": "Doc ky dau hieu thoi gian trong cau, sau do doi chieu cau truc ngu phap.",
+      }
+
+    data = _call_ai_service(
+      payload,
+      _fallback,
+      "answer explanation",
+      cache_ttl_seconds=600,
+      cache_key_suffix="answer-explanation",
+    )
+    if not isinstance(data, dict):
+      data = _fallback()
+    return {
+      "summary": (data.get("summary") or _fallback()["summary"]).strip(),
+      "why_wrong": (data.get("why_wrong") or _fallback()["why_wrong"]).strip(),
+      "memory_tip": (data.get("memory_tip") or _fallback()["memory_tip"]).strip(),
+    }
+
+
+def chat_with_tutor(message_history: list[dict], user_message: str) -> dict:
+    payload = {
+      "request_type": "tutor_chat",
+      "message_history": message_history[-20:],
+      "user_message": user_message,
+    }
+
+    def _fallback() -> dict:
+      return {
+        "assistant_reply": "Great try! Could you tell me more about your day? I can help correct your grammar while we chat.",
+        "corrections": [],
+        "error_tags": [],
+      }
+
+    data = _call_ai_service(payload, _fallback, "tutor chat")
+    if not isinstance(data, dict):
+      data = _fallback()
+    corrections = data.get("corrections") if isinstance(data.get("corrections"), list) else []
+    error_tags = data.get("error_tags") if isinstance(data.get("error_tags"), list) else []
+    return {
+      "assistant_reply": (data.get("assistant_reply") or _fallback()["assistant_reply"]).strip(),
+      "corrections": [str(c).strip() for c in corrections if str(c).strip()],
+      "error_tags": [str(t).strip().lower() for t in error_tags if str(t).strip()],
+    }
+
+
+def summarize_chat_session(message_history: list[dict]) -> dict:
+    payload = {
+      "request_type": "tutor_chat_summary",
+      "message_history": message_history[-40:],
+    }
+
+    def _fallback() -> dict:
+      return {
+        "summary": "Nguoi hoc giao tiep tot, can tiep tuc luyen thi dong tu va dat cau tu nhien hon.",
+        "key_errors": ["tense", "word_choice"],
+      }
+
+    data = _call_ai_service(
+      payload,
+      _fallback,
+      "chat summary",
+      cache_ttl_seconds=180,
+      cache_key_suffix="chat-summary",
+    )
+    if not isinstance(data, dict):
+      data = _fallback()
+    key_errors = data.get("key_errors") if isinstance(data.get("key_errors"), list) else []
+    return {
+      "summary": (data.get("summary") or _fallback()["summary"]).strip(),
+      "key_errors": [str(t).strip().lower() for t in key_errors if str(t).strip()],
     }
 
 

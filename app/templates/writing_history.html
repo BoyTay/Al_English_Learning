@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="fw-bold mb-0"><i class="bi bi-journal-text text-primary me-2"></i>Lịch sử luyện viết</h3>
+            <a href="{{ url_for('writing.practice') }}" class="btn btn-primary rounded-pill px-3">
+                <i class="bi bi-pencil-square me-1"></i>Bài mới
+            </a>
+        </div>
+        {% for item in submissions %}
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-body p-4">
+                <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+                    <div>
+                        <span class="badge text-bg-primary">Điểm {{ item.score|round(1) }}/10</span>
+                        {% if item.prompt %}
+                        <span class="badge text-bg-light border ms-1">{{ item.prompt.topic }}</span>
+                        {% endif %}
+                    </div>
+                    <small class="text-muted">{{ item.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                </div>
+                <p class="mb-2"><strong>Tổng kết AI:</strong> {{ item.feedback_summary }}</p>
+                {% if item.strengths %}
+                <p class="mb-1"><strong>Điểm mạnh:</strong> {{ item.strengths|join(', ') }}</p>
+                {% endif %}
+                {% if item.improvement_points %}
+                <p class="mb-3"><strong>Cần cải thiện:</strong> {{ item.improvement_points|join(', ') }}</p>
+                {% endif %}
+                <details>
+                    <summary class="fw-bold">Xem bài đã sửa</summary>
+                    <div class="mt-2 p-3 bg-light rounded-3">{{ item.corrected_text }}</div>
+                </details>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-light border">Chưa có lịch sử bài viết.</div>
+        {% endfor %}
+
+        <div class="d-flex justify-content-between mt-3">
+            <div>
+                {% if has_prev %}
+                <a href="{{ url_for('writing.history', page=page-1) }}" class="btn btn-outline-secondary rounded-pill">Trang trước</a>
+                {% endif %}
+            </div>
+            <div>
+                {% if has_more %}
+                <a href="{{ url_for('writing.history', page=page+1) }}" class="btn btn-outline-primary rounded-pill">Xem thêm</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

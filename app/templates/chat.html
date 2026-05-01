@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row mt-4">
+    <div class="col-lg-10 mx-auto">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="fw-bold mb-1"><i class="bi bi-chat-dots text-primary me-2"></i>Chat với AI Tutor</h4>
+                    <p class="text-muted mb-0">Trò chuyện tiếng Anh tự do, AI sẽ sửa lỗi nhẹ nhàng.</p>
+                </div>
+                <button class="btn btn-outline-danger rounded-pill" id="endSessionBtn">Kết thúc phiên</button>
+            </div>
+            <div class="card-body p-4">
+                <div id="chatBox" class="border rounded-3 p-3 mb-3 bg-light" style="height: 420px; overflow-y: auto;">
+                    {% for m in messages %}
+                    <div class="mb-3">
+                        <div class="small text-muted">{{ 'Bạn' if m.role == 'user' else 'AI Tutor' }}</div>
+                        <div class="p-2 rounded-3 {% if m.role == 'user' %}bg-primary text-white{% else %}bg-white border{% endif %}">{{ m.content }}</div>
+                        {% if m.role == 'assistant' and m.corrections %}
+                        <div class="small text-muted mt-1">Gợi ý sửa: {{ m.corrections|join(' • ') }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <div id="sessionSummary" class="alert alert-light border d-none"></div>
+                <form id="chatForm" class="d-flex gap-2">
+                    <input id="chatInput" class="form-control" placeholder="Nhập câu tiếng Anh của bạn..." autocomplete="off">
+                    <button class="btn btn-primary" type="submit">Gửi</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const sessionId = {{ chat_session.id }};
+    const chatBox = document.getElementById('chatBox');
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const summaryBox = document.getElementById('sessionSummary');
+    const endBtn = document.getElementById('endSessionBtn');
+
+    function appendMessage(role, content, corrections = []) {
+        const wrap = document.createElement('div');
+        wrap.className = 'mb-3';
+        const who = role === 'user' ? 'Bạn' : 'AI Tutor';
+        const bubbleClass = role === 'user' ? 'bg-primary text-white' : 'bg-white border';
+        wrap.innerHTML = `
+            <div class="small text-muted">${who}</div>
+            <div class="p-2 rounded-3 ${bubbleClass}">${content}</div>
+            ${role === 'assistant' && corrections.length ? `<div class="small text-muted mt-1">Gợi ý sửa: ${corrections.join(' • ')}</div>` : ''}
+        `;
+        chatBox.appendChild(wrap);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = chatInput.value.trim();
+        if (!text) return;
+        chatInput.value = '';
+        appendMessage('user', text);
+        const resp = await fetch("{{ url_for('chat.send') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, message: text })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            appendMessage('assistant', data.assistant_reply, data.corrections || []);
+        } else {
+            appendMessage('assistant', 'Mình đang gặp lỗi tạm thời, bạn thử lại nhé.');
+        }
+    });
+
+    endBtn.addEventListener('click', async () => {
+        endBtn.disabled = true;
+        const resp = await fetch("{{ url_for('chat.end_session') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            summaryBox.classList.remove('d-none');
+            summaryBox.innerHTML = `<strong>Tổng kết phiên:</strong> ${data.summary}<br><strong>Lỗi chính:</strong> ${(data.key_errors || []).join(', ') || 'Không có'}`;
+            chatForm.querySelector('button[type="submit"]').disabled = true;
+            chatInput.disabled = true;
+        } else {
+            endBtn.disabled = false;
+        }
+    });
+})();
+</script>
+{% endblock %}

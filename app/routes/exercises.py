@@ -3,6 +3,8 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import Topic, UserTopicProgress, ExerciseHistory, UserSubtopicProgress
 from app.queue_service import get_exercise as generate_exercise
+from app.gamification import apply_exercise_rewards
+from app.llm_service import explain_wrong_answer
 
 from app.sm2 import map_score_to_quality, calculate_sm2
 from datetime import datetime, timedelta, timezone
@@ -310,7 +312,13 @@ def submit_exercise():
             sub_progress.correct_count += 1
         sub_progress.error_rate = (sub_progress.total_attempted - sub_progress.correct_count) / max(1, sub_progress.total_attempted)
         sub_progress.updated_at = datetime.now(timezone.utc)
-    
+
+    reward_summary = apply_exercise_rewards(
+        current_user,
+        score=score,
+        total=total,
+        topic_name=topic_name,
+    )
     db.session.commit()
 
     threshold = float(current_user.error_threshold or 0.4)
@@ -323,4 +331,32 @@ def submit_exercise():
         "next_review": progress.next_review_date.strftime("%Y-%m-%d"),
         "threshold": threshold,
         "threshold_exceeded": threshold_exceeded,
+        "xp_gain": reward_summary["xp_gain"],
+        "level": reward_summary["level"],
+        "mission_bonus_xp": reward_summary["mission_bonus_xp"],
+        "awarded_badges": reward_summary["awarded_badges"],
     })
+
+
+@exercises_bp.route('/explain', methods=['POST'])
+@login_required
+def explain_answer():
+    data = request.json or {}
+    question = str(data.get('question') or '').strip()
+    options = data.get('options') if isinstance(data.get('options'), list) else []
+    correct_answer = str(data.get('correct_answer') or '').strip()
+    user_answer = str(data.get('user_answer') or '').strip()
+    topic_name = str(data.get('topic_name') or 'General English').strip()
+    question_type = str(data.get('question_type') or 'grammar').strip().lower()
+    if not question or not correct_answer or not user_answer:
+        return jsonify({"success": False, "message": "Thiếu dữ liệu để giải thích."}), 400
+
+    explanation = explain_wrong_answer(
+        question=question,
+        options=[str(o) for o in options],
+        correct_answer=correct_answer,
+        user_answer=user_answer,
+        topic=topic_name,
+        question_type=question_type,
+    )
+    return jsonify({"success": True, **explanation})

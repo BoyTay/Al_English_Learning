@@ -1,7 +1,9 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
+from sqlalchemy.exc import IntegrityError
 from app import db
-from app.models import Topic, UserTopicProgress, UserSubtopicProgress, UserRoadmapCache
+from app.models import UserRoadmapCache
+from app.gamification import ensure_daily_missions, get_recent_badges, get_weekly_leaderboard
 from datetime import datetime, timezone
 
 
@@ -39,8 +41,21 @@ def _get_cached_or_generate_roadmap(user_id: int, force_refresh: bool = False) -
     cache.grammar_roadmap = grammar
     cache.vocabulary_roadmap = vocab
     cache.updated_at = now
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Another concurrent request created this row first.
+        db.session.rollback()
+        cache = db.session.scalar(
+            db.select(UserRoadmapCache).where(UserRoadmapCache.user_id == user_id)
+        )
+        if cache:
+            cache.grammar_roadmap = grammar
+            cache.vocabulary_roadmap = vocab
+            cache.updated_at = now
+            db.session.commit()
     return grammar, vocab, now
+
 
 main_bp = Blueprint('main', __name__)
 
@@ -59,6 +74,11 @@ def dashboard():
     
     progress = current_user.progress
     subtopic_progress = current_user.subtopic_progress
+    ensure_daily_missions(current_user)
+    db.session.commit()
+    daily_missions = ensure_daily_missions(current_user)
+    recent_badges = get_recent_badges(current_user, limit=6)
+    weekly_leaderboard = get_weekly_leaderboard(limit=10)
     refresh_roadmap = (request.args.get('refresh_roadmap') == '1')
     history_filter = (request.args.get('history_filter') or 'all').strip().lower()
     if history_filter not in {'all', 'review'}:
@@ -131,7 +151,6 @@ def dashboard():
         current_user.id,
         force_refresh=refresh_roadmap,
     )
-
     all_progress_sorted = sorted(
         progress,
         key=lambda p: (
@@ -152,10 +171,6 @@ def dashboard():
         for p in weak_candidates[:5]
     ] if progress else []
 
-    def _needs_review(p: UserTopicProgress) -> bool:
-        overdue = bool(p.next_review_date and p.next_review_date.date() <= now.date())
-        return overdue or (p.error_rate or 0.0) >= threshold or (p.error_rate or 0.0) >= 0.15
-
     if history_filter == 'review':
         filtered_progress = [p for p in progress if (p.total_attempted or 0) > 0]
         if not filtered_progress:
@@ -173,7 +188,7 @@ def dashboard():
 
     if refresh_roadmap:
         flash('Đã làm mới lộ trình AI cho hôm nay.', 'success')
-        
+
     return render_template('dashboard.html', 
                            weakest_topic=weakest_topic,
                            progress=history_rows,
@@ -189,7 +204,10 @@ def dashboard():
                            history_filter=history_filter,
                            history_page=page,
                            history_has_more=has_more,
-                           history_has_prev=has_prev)
+                           history_has_prev=has_prev,
+                           daily_missions=daily_missions,
+                           recent_badges=recent_badges,
+                           weekly_leaderboard=weekly_leaderboard)
 
 
 @main_bp.route('/settings', methods=['GET', 'POST'])

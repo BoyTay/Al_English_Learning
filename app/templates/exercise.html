@@ -55,6 +55,11 @@
                                         <span class="fs-5 feedback-text"></span>
                                     </div>
                                     <p class="mb-0 mt-3 fs-6 d-flex"><i class="bi bi-info-circle me-2 mt-1"></i> <span class="explanation-text">{{ q.explanation }}</span></p>
+                                    <div class="mt-3 d-none ai-explain-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill ai-explain-btn">Tại sao sai?</button>
+                                        <div class="small mt-2 text-muted d-none ai-explain-loading">Đang nhờ AI giải thích...</div>
+                                        <div class="mt-2 small d-none ai-explain-result"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -124,7 +129,7 @@
             
             feedbackBox.classList.remove('d-none'); 
             
-            if (selected === correctAns) {
+                if (selected === correctAns) {
                 score++;
                 feedbackBox.querySelector('.correct-icon').classList.remove('d-none');
                 
@@ -156,7 +161,7 @@
                 feedbackText.innerHTML = '<strong style="color: #155724; font-size: 1.2rem;">✓ Chính xác!</strong>';
                 feedbackBox.querySelector('.bi-info-circle').style.color = '#28a745';
                 feedbackBox.querySelector('.explanation-text').style.color = '#155724';
-            } else {
+                } else {
                 feedbackBox.querySelector('.wrong-icon').classList.remove('d-none');
                 
                 // Đáp án chọn SAI - nền đỏ nhạt với chữ đỏ đậm
@@ -188,7 +193,48 @@
                 feedbackText.innerHTML = `<strong style="color: #721c24; font-size: 1.2rem;">✗ Sai rồi!</strong><br><span style="color: #000; font-size: 1rem;">Đáp án đúng là: </span><strong style="color: #28a745; font-size: 1.15rem; background: #d4edda; padding: 4px 12px; border-radius: 6px; display: inline-block; margin-top: 8px;">${correctAns}</strong>`;
                 feedbackBox.querySelector('.bi-info-circle').style.color = '#dc3545';
                 feedbackBox.querySelector('.explanation-text').style.color = '#721c24';
-                
+                const explainWrap = feedbackBox.querySelector('.ai-explain-wrap');
+                const explainBtn = feedbackBox.querySelector('.ai-explain-btn');
+                const explainLoading = feedbackBox.querySelector('.ai-explain-loading');
+                const explainResult = feedbackBox.querySelector('.ai-explain-result');
+                explainWrap.classList.remove('d-none');
+                explainLoading.classList.add('d-none');
+                explainResult.classList.add('d-none');
+                explainBtn.disabled = false;
+                explainBtn.onclick = function () {
+                    explainBtn.disabled = true;
+                    explainLoading.classList.remove('d-none');
+                    fetch("{{ url_for('exercises.explain_answer') }}", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            topic_name: topicName,
+                            question_type: exerciseRawData.questions[i].question_type || 'grammar',
+                            question: exerciseRawData.questions[i].question,
+                            options: exerciseRawData.questions[i].options || [],
+                            correct_answer: correctAns,
+                            user_answer: selected
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        explainLoading.classList.add('d-none');
+                        explainResult.classList.remove('d-none');
+                        if (data.success) {
+                            explainResult.innerHTML = `<div class="border rounded-3 p-2 bg-white"><strong>Giải thích:</strong> ${data.why_wrong}<br><strong>Mẹo nhớ:</strong> ${data.memory_tip}</div>`;
+                        } else {
+                            explainResult.textContent = "Chưa lấy được giải thích AI. Vui lòng thử lại.";
+                            explainBtn.disabled = false;
+                        }
+                    })
+                    .catch(() => {
+                        explainLoading.classList.add('d-none');
+                        explainResult.classList.remove('d-none');
+                        explainResult.textContent = "Có lỗi khi gọi AI giải thích.";
+                        explainBtn.disabled = false;
+                    });
+                };
+                 
                 // Highlight đáp án ĐÚNG - màu xanh đậm rất rõ
                 document.querySelectorAll(`input[name="q_${i}"]`).forEach(el => {
                     // So sánh để tìm đáp án đúng
@@ -270,7 +316,9 @@
                 if (data.threshold_exceeded) {
                     warningText = `<br><span class="text-danger">Tỉ lệ lỗi đang vượt ngưỡng ${(data.threshold * 100).toFixed(0)}%. Hệ thống sẽ ưu tiên đề xuất ôn tập chủ đề này.</span>`;
                 }
-                document.getElementById('sm2UpdateText').innerHTML = `Hệ thống đã lưu lại tiến trình điểm yếu. Nhịp điệu ôn lịch tiếp theo: <strong class="text-dark">${data.next_review}</strong>${warningText}`;
+                const rewardLine = data.xp_gain ? `<br><span class="text-primary">Thưởng: +${data.xp_gain} XP • Level ${data.level}</span>` : '';
+                const badgeLine = (data.awarded_badges && data.awarded_badges.length) ? `<br><span class="text-success">Huy hiệu mới: ${data.awarded_badges.join(', ')}</span>` : '';
+                document.getElementById('sm2UpdateText').innerHTML = `Hệ thống đã lưu lại tiến trình điểm yếu. Nhịp điệu ôn lịch tiếp theo: <strong class="text-dark">${data.next_review}</strong>${warningText}${rewardLine}${badgeLine}`;
             }
         });
     }

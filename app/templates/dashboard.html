@@ -5,6 +5,7 @@
         <h2 class="fw-bold"><i class="bi bi-speedometer2 text-primary"></i> Hôm Nay Học Gì?</h2>
         <p class="text-muted fs-5 mb-0">Chào mừng <strong>{{ current_user.username }}</strong>.
             <span class="badge bg-warning text-dark fs-6 rounded-pill px-3 ms-2"><i class="bi bi-fire"></i> {{ current_user.streak_days }} ngày liên tiếp</span>
+            <span class="badge bg-primary-subtle text-primary fs-6 rounded-pill px-3 ms-2"><i class="bi bi-lightning-charge"></i> Lv {{ current_user.level or 1 }} • {{ current_user.xp_points or 0 }} XP</span>
         </p>
     </div>
     <div class="col-md-4 text-md-end mt-3 mt-md-0">
@@ -49,11 +50,25 @@
                     <i class="bi bi-arrow-right today-cta-arrow"></i>
                 </a>
                 {% else %}
-                <a href="{{ url_for('exercises.new_exercise', mode='random') }}" class="btn btn-primary btn-lg rounded-pill px-4 fw-bold today-cta d-inline-flex align-items-center gap-2">
-                    <i class="bi bi-rocket-takeoff-fill"></i>
-                    <span>Làm bài mới</span>
-                    <i class="bi bi-arrow-right today-cta-arrow"></i>
-                </a>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ url_for('exercises.new_exercise', mode='random') }}" class="btn btn-primary btn-lg rounded-pill px-4 fw-bold today-cta d-inline-flex align-items-center gap-2">
+                        <i class="bi bi-rocket-takeoff-fill"></i>
+                        <span>Làm bài mới</span>
+                        <i class="bi bi-arrow-right today-cta-arrow"></i>
+                    </a>
+                    <a href="{{ url_for('writing.practice') }}" class="btn btn-outline-primary btn-lg rounded-pill px-4 fw-bold d-inline-flex align-items-center gap-2">
+                        <i class="bi bi-pencil-square"></i>
+                        <span>Luyện viết hôm nay</span>
+                    </a>
+                    <a href="{{ url_for('speaking.practice') }}" class="btn btn-outline-secondary btn-lg rounded-pill px-4 fw-bold d-inline-flex align-items-center gap-2">
+                        <i class="bi bi-mic"></i>
+                        <span>Luyện Speaking</span>
+                    </a>
+                    <a href="{{ url_for('chat.index') }}" class="btn btn-outline-dark btn-lg rounded-pill px-4 fw-bold d-inline-flex align-items-center gap-2">
+                        <i class="bi bi-chat-dots"></i>
+                        <span>Chat với Tutor</span>
+                    </a>
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -77,6 +92,57 @@
                 {% else %}
                     <p class="text-muted small mb-0">Chưa có dữ liệu đủ để phân tích điểm yếu.</p>
                 {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-list-check text-primary me-2"></i>Nhiệm vụ hôm nay</h6>
+                {% for mission in daily_missions %}
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between small">
+                        <span>{{ mission.title }}</span>
+                        <span>{% if mission.completed %}<span class="text-success fw-bold">+{{ mission.reward_xp }} XP</span>{% else %}{{ mission.progress_value }}/{{ mission.target_value }}{% endif %}</span>
+                    </div>
+                    <div class="progress mt-1" style="height: 8px;">
+                        <div class="progress-bar {% if mission.completed %}bg-success{% else %}bg-primary{% endif %}" style="width: {{ (mission.progress_value * 100 / (mission.target_value or 1))|round(0) }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-award text-primary me-2"></i>Huy hiệu gần đây</h6>
+                {% for ub in recent_badges %}
+                <div class="border rounded-3 p-2 mb-2">
+                    <div class="fw-bold">{{ ub.badge.name }}</div>
+                    <div class="small text-muted">{{ ub.badge.description }}</div>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">Chưa có huy hiệu. Hoàn thành nhiệm vụ để mở khóa.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-trophy text-primary me-2"></i>BXH XP tuần (Top 10)</h6>
+                {% for row in weekly_leaderboard %}
+                <div class="d-flex justify-content-between small mb-1">
+                    <span>{% if row.user_id == current_user.id %}<strong>{{ row.rank }}. {{ row.username }} (Bạn)</strong>{% else %}{{ row.rank }}. {{ row.username }}{% endif %}</span>
+                    <span class="fw-bold">{{ row.xp }} XP</span>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">Chưa có dữ liệu bảng xếp hạng.</p>
+                {% endfor %}
             </div>
         </div>
     </div>

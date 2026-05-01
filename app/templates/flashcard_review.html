@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="fw-bold mb-0"><i class="bi bi-lightning text-primary me-2"></i>Ôn Flashcard đến hạn</h3>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('flashcards.index') }}" class="btn btn-outline-secondary rounded-pill">Về Flashcard</a>
+            </div>
+        </div>
+        {% if selected_set %}
+        <div class="alert alert-light border">Đang ôn bộ: <strong>{{ selected_set.title }}</strong></div>
+        {% endif %}
+
+        {% for card in due_cards %}
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h4 class="fw-bold mb-0">{{ card.term }}</h4>
+                    <span class="badge text-bg-light border">Lần ôn: {{ card.review_count }}</span>
+                </div>
+                <p class="mb-2"><strong>Nghĩa:</strong> {{ card.definition }}</p>
+                {% if card.example_sentence %}
+                <p class="mb-2"><strong>Ví dụ:</strong> {{ card.example_sentence }}</p>
+                {% endif %}
+                {% if card.pronunciation_hint %}
+                <p class="mb-2"><strong>Phát âm:</strong> {{ card.pronunciation_hint }}</p>
+                {% endif %}
+                {% if card.image_hint %}
+                <p class="mb-3"><strong>Gợi ý hình ảnh:</strong> {{ card.image_hint }}</p>
+                {% endif %}
+
+                <div class="d-flex flex-wrap gap-2">
+                    <form method="post" action="{{ url_for('flashcards.submit_review') }}">
+                        <input type="hidden" name="card_id" value="{{ card.id }}">
+                        <input type="hidden" name="set_id" value="{{ set_id or '' }}">
+                        <input type="hidden" name="quality" value="1">
+                        <button type="submit" class="btn btn-outline-danger rounded-pill">Quên rồi</button>
+                    </form>
+                    <form method="post" action="{{ url_for('flashcards.submit_review') }}">
+                        <input type="hidden" name="card_id" value="{{ card.id }}">
+                        <input type="hidden" name="set_id" value="{{ set_id or '' }}">
+                        <input type="hidden" name="quality" value="3">
+                        <button type="submit" class="btn btn-outline-warning rounded-pill">Khó nhớ</button>
+                    </form>
+                    <form method="post" action="{{ url_for('flashcards.submit_review') }}">
+                        <input type="hidden" name="card_id" value="{{ card.id }}">
+                        <input type="hidden" name="set_id" value="{{ set_id or '' }}">
+                        <input type="hidden" name="quality" value="4">
+                        <button type="submit" class="btn btn-outline-primary rounded-pill">Nhớ tốt</button>
+                    </form>
+                    <form method="post" action="{{ url_for('flashcards.submit_review') }}">
+                        <input type="hidden" name="card_id" value="{{ card.id }}">
+                        <input type="hidden" name="set_id" value="{{ set_id or '' }}">
+                        <input type="hidden" name="quality" value="5">
+                        <button type="submit" class="btn btn-success rounded-pill">Rất dễ</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-success">Hiện chưa có thẻ nào đến hạn ôn tập.</div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

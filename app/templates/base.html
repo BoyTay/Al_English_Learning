@@ -20,10 +20,19 @@
                 <ul class="navbar-nav ms-auto align-items-center">
                     {% if current_user.is_authenticated %}
                         <li class="nav-item">
-                            <a class="nav-link app-nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard <span class="badge bg-warning text-dark rounded-pill ms-1"><i class="bi bi-fire"></i> {{ current_user.streak_days }}</span></a>
+                            <a class="nav-link app-nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link btn btn-light text-primary ms-3 px-3 fw-bold rounded-pill shadow-sm app-nav-cta {% if request.endpoint == 'exercises.new_exercise' %}active{% endif %}" href="{{ url_for('exercises.new_exercise') }}">Làm bài ngay</a>
+                        </li>
+                        <li class="nav-item ms-3">
+                            <a class="nav-link app-nav-link {% if request.endpoint and request.endpoint.startswith('writing.') %}active{% endif %}" href="{{ url_for('writing.practice') }}"><i class="bi bi-pencil-square"></i> Luyện viết</a>
+                        </li>
+                        <li class="nav-item ms-3">
+                            <a class="nav-link app-nav-link {% if request.endpoint and request.endpoint.startswith('flashcards.') %}active{% endif %}" href="{{ url_for('flashcards.index') }}"><i class="bi bi-collection"></i> Flashcard</a>
+                        </li>
+                        <li class="nav-item ms-3">
+                            <a class="nav-link app-nav-link {% if request.endpoint and request.endpoint.startswith('speaking.') %}active{% endif %}" href="{{ url_for('speaking.practice') }}"><i class="bi bi-mic"></i> Speaking</a>
                         </li>
                         <li class="nav-item ms-3">
                             <a class="nav-link app-nav-link {% if request.endpoint == 'main.settings' %}active{% endif %}" href="{{ url_for('main.settings') }}"><i class="bi bi-gear"></i> Cài đặt</a>
@@ -58,9 +67,146 @@
         
         {% block content %}{% endblock %}
     </div>
+    {% if current_user.is_authenticated and not (request.endpoint and request.endpoint.startswith('chat.')) %}
+    <div id="chatWidget" class="chat-widget">
+        <button id="chatWidgetToggle" class="chat-widget-toggle" type="button">
+            <i class="bi bi-chat-dots-fill"></i>
+            <span>Chat Tutor</span>
+        </button>
+        <div id="chatWidgetPanel" class="chat-widget-panel d-none">
+            <div class="chat-widget-header">
+                <strong>AI Tutor</strong>
+                <button id="chatWidgetMinimize" class="btn btn-sm btn-light py-0 px-2" type="button">–</button>
+            </div>
+            <div id="chatWidgetMessages" class="chat-widget-messages"></div>
+            <div id="chatWidgetSummary" class="chat-widget-summary d-none"></div>
+            <form id="chatWidgetForm" class="chat-widget-form">
+                <input id="chatWidgetInput" class="form-control form-control-sm" placeholder="Nhập tiếng Anh..." autocomplete="off">
+                <button class="btn btn-primary btn-sm" type="submit">Gửi</button>
+            </form>
+            <button id="chatWidgetEnd" class="btn btn-outline-danger btn-sm mt-2 w-100" type="button">Kết thúc phiên</button>
+        </div>
+    </div>
+    {% endif %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    {% if current_user.is_authenticated and not (request.endpoint and request.endpoint.startswith('chat.')) %}
+    <script>
+    (() => {
+        const initUrl = "{{ url_for('chat.widget_init') }}";
+        const sendUrl = "{{ url_for('chat.send') }}";
+        const endUrl = "{{ url_for('chat.end_session') }}";
+        const toggleBtn = document.getElementById('chatWidgetToggle');
+        const panel = document.getElementById('chatWidgetPanel');
+        const minimizeBtn = document.getElementById('chatWidgetMinimize');
+        const messagesBox = document.getElementById('chatWidgetMessages');
+        const summaryBox = document.getElementById('chatWidgetSummary');
+        const form = document.getElementById('chatWidgetForm');
+        const input = document.getElementById('chatWidgetInput');
+        const endBtn = document.getElementById('chatWidgetEnd');
+        if (!toggleBtn || !panel) return;
+
+        let sessionId = null;
+        const openClass = 'chat-widget-open';
+
+        function appendMessage(role, content, corrections = []) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'chat-widget-item';
+            const roleLine = document.createElement('div');
+            roleLine.className = 'chat-widget-role';
+            roleLine.textContent = role === 'user' ? 'Bạn' : 'AI Tutor';
+            const bubble = document.createElement('div');
+            bubble.className = `chat-widget-bubble ${role === 'user' ? 'chat-widget-bubble-user' : 'chat-widget-bubble-ai'}`;
+            bubble.textContent = content;
+            wrapper.appendChild(roleLine);
+            wrapper.appendChild(bubble);
+            if (role === 'assistant' && corrections.length) {
+                const correction = document.createElement('div');
+                correction.className = 'chat-widget-correction';
+                correction.textContent = `Gợi ý sửa: ${corrections.join(' • ')}`;
+                wrapper.appendChild(correction);
+            }
+            messagesBox.appendChild(wrapper);
+            messagesBox.scrollTop = messagesBox.scrollHeight;
+        }
+
+        async function initSession(forceNew = false) {
+            const url = forceNew ? `${initUrl}?force_new=1` : initUrl;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (!data.success) return;
+            sessionId = data.session_id;
+            messagesBox.innerHTML = '';
+            (data.messages || []).forEach(msg => {
+                appendMessage(msg.role, msg.content, msg.corrections || []);
+            });
+            summaryBox.classList.add('d-none');
+            summaryBox.textContent = '';
+            form.querySelector('button[type="submit"]').disabled = false;
+            input.disabled = false;
+            endBtn.disabled = false;
+        }
+
+        toggleBtn.addEventListener('click', () => {
+            panel.classList.toggle('d-none');
+            toggleBtn.classList.toggle(openClass);
+            if (!panel.classList.contains('d-none') && !sessionId) {
+                initSession(false);
+            }
+        });
+        minimizeBtn.addEventListener('click', () => panel.classList.add('d-none'));
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = input.value.trim();
+            if (!text || !sessionId) return;
+            input.value = '';
+            appendMessage('user', text);
+            const resp = await fetch(sendUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: sessionId, message: text })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                appendMessage('assistant', data.assistant_reply, data.corrections || []);
+            } else {
+                appendMessage('assistant', 'Mình đang bận một chút, bạn thử lại nhé.');
+            }
+        });
+
+        endBtn.addEventListener('click', async () => {
+            if (!sessionId) return;
+            endBtn.disabled = true;
+            const resp = await fetch(endUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: sessionId })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                summaryBox.classList.remove('d-none');
+                summaryBox.textContent = `Tổng kết: ${data.summary} | Lỗi chính: ${(data.key_errors || []).join(', ') || 'Không có'}`;
+                form.querySelector('button[type="submit"]').disabled = true;
+                input.disabled = true;
+                const again = document.createElement('button');
+                again.className = 'btn btn-sm btn-outline-primary w-100 mt-2';
+                again.textContent = 'Bắt đầu phiên mới';
+                again.type = 'button';
+                again.onclick = async () => {
+                    again.remove();
+                    await initSession(true);
+                };
+                summaryBox.appendChild(document.createElement('br'));
+                summaryBox.appendChild(again);
+            } else {
+                endBtn.disabled = false;
+            }
+        });
+    })();
+    </script>
+    {% endif %}
     {% block scripts %}{% endblock %}
 </body>
 </html>

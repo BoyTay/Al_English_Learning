@@ -54,7 +54,6 @@
                                         <i class="bi bi-x-circle-fill text-danger fs-3 me-2 d-none wrong-icon"></i>
                                         <span class="fs-5 feedback-text"></span>
                                     </div>
-                                    <p class="mb-0 mt-3 fs-6 d-flex"><i class="bi bi-info-circle me-2 mt-1"></i> <span class="explanation-text">{{ q.explanation }}</span></p>
                                     <div class="mt-3 d-none ai-explain-wrap">
                                         <button type="button" class="btn btn-sm btn-outline-danger rounded-pill ai-explain-btn">Tại sao sai?</button>
                                         <div class="small mt-2 text-muted d-none ai-explain-loading">Đang nhờ AI giải thích...</div>
@@ -159,8 +158,6 @@
                 alertBox.style.backgroundColor = '#d4edda';
                 alertBox.style.border = '2px solid #28a745';
                 feedbackText.innerHTML = '<strong style="color: #155724; font-size: 1.2rem;">✓ Chính xác!</strong>';
-                feedbackBox.querySelector('.bi-info-circle').style.color = '#28a745';
-                feedbackBox.querySelector('.explanation-text').style.color = '#155724';
                 } else {
                 feedbackBox.querySelector('.wrong-icon').classList.remove('d-none');
                 
@@ -191,8 +188,6 @@
                 alertBox.style.backgroundColor = '#f8d7da';
                 alertBox.style.border = '2px solid #dc3545';
                 feedbackText.innerHTML = `<strong style="color: #721c24; font-size: 1.2rem;">✗ Sai rồi!</strong><br><span style="color: #000; font-size: 1rem;">Đáp án đúng là: </span><strong style="color: #28a745; font-size: 1.15rem; background: #d4edda; padding: 4px 12px; border-radius: 6px; display: inline-block; margin-top: 8px;">${correctAns}</strong>`;
-                feedbackBox.querySelector('.bi-info-circle').style.color = '#dc3545';
-                feedbackBox.querySelector('.explanation-text').style.color = '#721c24';
                 const explainWrap = feedbackBox.querySelector('.ai-explain-wrap');
                 const explainBtn = feedbackBox.querySelector('.ai-explain-btn');
                 const explainLoading = feedbackBox.querySelector('.ai-explain-loading');

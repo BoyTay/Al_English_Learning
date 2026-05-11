@@ -182,7 +182,7 @@ def get_recent_badges(user: User, limit: int = 6) -> list[UserBadge]:
 
 def get_weekly_leaderboard(limit: int = 10) -> list[dict]:
     now = datetime.now(timezone.utc)
-    week_start = now - timedelta(days=now.weekday())
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     xp_sum = db.func.coalesce(db.func.sum(XPEvent.amount), 0)
     rows = db.session.execute(
         db.select(

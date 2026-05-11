@@ -87,6 +87,7 @@ class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(64), index=True, unique=True)
+    email: Mapped[Optional[str]] = mapped_column(String(120), index=True, unique=True)
     password_hash: Mapped[Optional[str]] = mapped_column(String(256))
     streak_days: Mapped[int] = mapped_column(Integer, default=0)
     last_study_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
@@ -318,6 +319,11 @@ def ensure_user_schema() -> None:
             if 'total_correct_answers' not in columns:
                 connection.execute(text(
                     "ALTER TABLE users ADD COLUMN total_correct_answers INTEGER DEFAULT 0"
+                ))
+                connection.commit()
+            if 'email' not in columns:
+                connection.execute(text(
+                    "ALTER TABLE users ADD COLUMN email VARCHAR(120)"
                 ))
                 connection.commit()
     except Exception:

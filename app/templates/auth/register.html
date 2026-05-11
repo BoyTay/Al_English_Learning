@@ -13,9 +13,17 @@
                         <label class="form-label text-muted fw-bold">Tên tài khoản mới</label>
                         <input type="text" name="username" class="form-control form-control-lg rounded-3" required>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted fw-bold">Email</label>
+                        <input type="email" name="email" class="form-control form-control-lg rounded-3" placeholder="Ví dụ: abc@gmail.com" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted fw-bold">Mật khẩu (tối thiểu 8 ký tự)</label>
+                        <input type="password" name="password" class="form-control form-control-lg rounded-3" minlength="8" required>
+                    </div>
                     <div class="mb-4">
-                        <label class="form-label text-muted fw-bold">Mật khẩu</label>
-                        <input type="password" name="password" class="form-control form-control-lg rounded-3" required>
+                        <label class="form-label text-muted fw-bold">Nhập lại mật khẩu</label>
+                        <input type="password" name="password_confirm" class="form-control form-control-lg rounded-3" minlength="8" required>
                     </div>
                     <button type="submit" class="btn btn-success btn-lg w-100 mb-3 rounded-pill fw-bold">Đăng Ký</button>
                     <div class="text-center mt-3">

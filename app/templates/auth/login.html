@@ -14,7 +14,10 @@
                         <input type="text" name="username" class="form-control form-control-lg rounded-3" placeholder="Nhập username" required>
                     </div>
                     <div class="mb-4">
-                        <label class="form-label text-muted fw-bold">Mật khẩu</label>
+                        <div class="d-flex justify-content-between">
+                            <label class="form-label text-muted fw-bold">Mật khẩu</label>
+                            <a href="{{ url_for('auth.forgot_password') }}" class="text-decoration-none small">Quên mật khẩu?</a>
+                        </div>
                         <input type="password" name="password" class="form-control form-control-lg rounded-3" placeholder="*********" required>
                     </div>
                     <button type="submit" class="btn btn-primary btn-lg w-100 mb-3 rounded-pill fw-bold">Đăng Nhập</button>

@@ -2,6 +2,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_migrate import Migrate
+from flask_mail import Mail
 from app.config import Config
 import os
 
@@ -11,6 +12,7 @@ login = LoginManager()
 login.login_view = 'auth.login'
 login.login_message = 'Vui lòng đăng nhập để truy cập trang này.'
 login.login_message_category = 'warning'
+mail = Mail()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -20,6 +22,7 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     login.init_app(app)
+    mail.init_app(app)
 
     # Import models before any schema initialization so SQLAlchemy metadata is populated.
     from app import models

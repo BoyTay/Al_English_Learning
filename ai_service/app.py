@@ -268,10 +268,14 @@ Requirements:
 - No markdown and no explanation outside JSON.
 - Create exactly {card_count} cards.
 - Keep terms practical for A2-B1 learners.
-- definition must be short and clear.
+- definition must be short and clear (English).
+- meaning_vi must be a short Vietnamese translation.
+- part_of_speech must be one of: noun, verb, adjective, adverb, phrase.
 - example_sentence should use natural daily English.
 - pronunciation_hint should be easy to read for Vietnamese learners.
+- ipa_pronunciation should be standard IPA, e.g. /ˈpæs.pɔːrt/.
 - image_hint should be a short phrase describing a simple visual idea.
+- image_url can be empty string if no image.
 
 Required JSON format:
 {{
@@ -279,9 +283,13 @@ Required JSON format:
     {{
       "term": "...",
       "definition": "...",
+      "meaning_vi": "...",
+      "part_of_speech": "noun|verb|adjective|adverb|phrase",
       "example_sentence": "...",
       "pronunciation_hint": "...",
-      "image_hint": "..."
+      "ipa_pronunciation": "...",
+      "image_hint": "...",
+      "image_url": ""
     }}
   ]
 }}

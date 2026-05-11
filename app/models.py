@@ -245,9 +245,14 @@ class Flashcard(db.Model):
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
     term: Mapped[str] = mapped_column(String(255))
     definition: Mapped[str] = mapped_column(Text)
+    vietnamese_meaning: Mapped[Optional[str]] = mapped_column(Text)
+    part_of_speech: Mapped[Optional[str]] = mapped_column(String(32))
+    ipa_pronunciation: Mapped[Optional[str]] = mapped_column(String(64))
     example_sentence: Mapped[Optional[str]] = mapped_column(Text)
+    example_sentence_2: Mapped[Optional[str]] = mapped_column(Text)
     pronunciation_hint: Mapped[Optional[str]] = mapped_column(String(255))
     image_hint: Mapped[Optional[str]] = mapped_column(String(255))
+    image_url: Mapped[Optional[str]] = mapped_column(String(512))
     easiness_factor: Mapped[float] = mapped_column(Float, default=2.5)
     interval: Mapped[int] = mapped_column(Integer, default=0)
     repetitions: Mapped[int] = mapped_column(Integer, default=0)
@@ -425,6 +430,52 @@ def ensure_roadmap_cache_schema() -> None:
                         "ALTER TABLE user_roadmap_cache ADD COLUMN weekly_plan_updated_at DATETIME"
                     ))
                     connection.commit()
+    except Exception:
+        pass
+
+
+def ensure_flashcard_schema() -> None:
+    """Ensure flashcards table has extended fields (SQLite only helper)."""
+    try:
+        engine = db.engine
+        if engine.dialect.name != 'sqlite':
+            return
+
+        with engine.connect() as connection:
+            exists = connection.execute(text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='flashcards'"
+            )).fetchone()
+            if not exists:
+                return
+            columns = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(flashcards)"))
+            }
+            if 'vietnamese_meaning' not in columns:
+                connection.execute(text(
+                    "ALTER TABLE flashcards ADD COLUMN vietnamese_meaning TEXT"
+                ))
+                connection.commit()
+            if 'part_of_speech' not in columns:
+                connection.execute(text(
+                    "ALTER TABLE flashcards ADD COLUMN part_of_speech VARCHAR(32)"
+                ))
+                connection.commit()
+            if 'ipa_pronunciation' not in columns:
+                connection.execute(text(
+                    "ALTER TABLE flashcards ADD COLUMN ipa_pronunciation VARCHAR(64)"
+                ))
+                connection.commit()
+            if 'example_sentence_2' not in columns:
+                connection.execute(text(
+                    "ALTER TABLE flashcards ADD COLUMN example_sentence_2 TEXT"
+                ))
+                connection.commit()
+            if 'image_url' not in columns:
+                connection.execute(text(
+                    "ALTER TABLE flashcards ADD COLUMN image_url VARCHAR(512)"
+                ))
+                connection.commit()
     except Exception:
         pass
 

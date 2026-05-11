@@ -13,22 +13,51 @@
         {% endif %}
 
         {% for card in due_cards %}
-        <div class="card border-0 shadow-sm rounded-4 mb-3">
+        <div class="card border-0 shadow-sm rounded-4 mb-3 flashcard-review-card">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <h4 class="fw-bold mb-0">{{ card.term }}</h4>
+                <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+                    <div>
+                        <h4 class="fw-bold mb-1 d-flex align-items-center gap-2 flex-wrap flashcard-term">
+                            <span>{{ card.term }}</span>
+                            {% if card.part_of_speech %}
+                            <span class="badge text-bg-light border text-uppercase">{{ card.part_of_speech }}</span>
+                            {% endif %}
+                        </h4>
+                        <div class="flashcard-details">
+                            {% if card.vietnamese_meaning %}
+                            <div class="flashcard-line"><strong>Nghĩa:</strong> {{ card.vietnamese_meaning }}</div>
+                            {% endif %}
+                            {% if card.example_sentence %}
+                            <div class="flashcard-line"><strong>Ví dụ:</strong> {{ card.example_sentence }}</div>
+                            {% endif %}
+                            {% if card.pronunciation_hint or card.ipa_pronunciation %}
+                            <div class="flashcard-line"><strong>Phát âm:</strong> {{ card.pronunciation_hint or '' }}{% if card.ipa_pronunciation %} <span class="flashcard-ipa">({{ card.ipa_pronunciation }})</span>{% endif %}</div>
+                            {% endif %}
+                        </div>
+                    </div>
                     <span class="badge text-bg-light border">Lần ôn: {{ card.review_count }}</span>
                 </div>
-                <p class="mb-2"><strong>Nghĩa:</strong> {{ card.definition }}</p>
-                {% if card.example_sentence %}
-                <p class="mb-2"><strong>Ví dụ:</strong> {{ card.example_sentence }}</p>
-                {% endif %}
-                {% if card.pronunciation_hint %}
-                <p class="mb-2"><strong>Phát âm:</strong> {{ card.pronunciation_hint }}</p>
-                {% endif %}
-                {% if card.image_hint %}
-                <p class="mb-3"><strong>Gợi ý hình ảnh:</strong> {{ card.image_hint }}</p>
-                {% endif %}
+                <div class="mb-3">
+                    <strong class="flashcard-line">Hình ảnh:</strong>
+                    <div class="flashcard-image-shell {% if not card.image_url %}is-error{% endif %}">
+                        {% if card.image_url %}
+                        <img src="{{ card.image_url }}"
+                             alt="{{ card.term }}"
+                             loading="lazy"
+                             class="flashcard-image"
+                             onload="this.closest('.flashcard-image-shell').classList.add('is-loaded')"
+                             onerror="this.classList.add('d-none'); this.closest('.flashcard-image-shell').classList.remove('is-loaded'); this.closest('.flashcard-image-shell').classList.add('is-error');">
+                        {% endif %}
+                        <div class="flashcard-image-overlay flashcard-image-loading">
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Đang tải ảnh...
+                        </div>
+                        <div class="flashcard-image-overlay flashcard-image-fallback">
+                            <i class="bi bi-image me-1"></i>
+                            {% if card.image_hint %}{{ card.image_hint }}{% else %}Chưa có ảnh minh họa{% endif %}
+                        </div>
+                    </div>
+                </div>
 
                 <div class="d-flex flex-wrap gap-2">
                     <form method="post" action="{{ url_for('flashcards.submit_review') }}">

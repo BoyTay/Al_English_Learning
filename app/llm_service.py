@@ -5,6 +5,8 @@ import json
 import re
 import math
 import random
+import hashlib
+from urllib.parse import quote
 import threading
 from collections import defaultdict, deque
 from flask import current_app
@@ -55,6 +57,34 @@ def _deep_clone_json_data(value):
     return json.loads(json.dumps(value, ensure_ascii=False))
   except Exception:
     return value
+
+
+def get_image_for_query(query: str, exact_term: str = None) -> str:
+    cleaned = (query or "").strip()
+    term_to_search = (exact_term or cleaned).strip()
+    if not term_to_search:
+        return ""
+    
+    # Try Pixabay if API key exists
+    pixabay_key = os.environ.get('PIXABAY_API_KEY')
+    if pixabay_key:
+        try:
+            # Pixabay works best with short keywords (the exact term)
+            import re
+            search_query = re.sub(r'[^a-zA-Z0-9\s]', '', term_to_search)
+            url = f"https://pixabay.com/api/?key={pixabay_key}&q={quote(search_query)}&image_type=photo&orientation=horizontal&per_page=3"
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('hits') and len(data['hits']) > 0:
+                    return data['hits'][0]['webformatURL']
+        except Exception as e:
+            if current_app:
+                current_app.logger.warning(f"[llm_service] Pixabay error: {e}")
+            
+    # Fallback to placeholder if no key or no results
+    display_text = quote(" ".join(cleaned.split()[:3]))
+    return f"https://placehold.co/512x384/2c3e50/ffffff?text={display_text}"
 
 
 def check_rate_limit(
@@ -483,23 +513,35 @@ def generate_flashcards(topic: str, count: int = 10) -> list[dict]:
           {
             "term": "adapt",
             "definition": "to change your behavior to suit a new situation",
+            "meaning_vi": "thích nghi",
+            "part_of_speech": "verb",
             "example_sentence": "It took me a week to adapt to my new class schedule.",
             "pronunciation_hint": "uh-DAPT",
+            "ipa_pronunciation": "/əˈdæpt/",
             "image_hint": "student adjusting to a new classroom",
+            "image_url": "",
           },
           {
             "term": "deadline",
             "definition": "the latest time by which something must be finished",
+            "meaning_vi": "hạn chót",
+            "part_of_speech": "noun",
             "example_sentence": "Our essay deadline is next Friday.",
             "pronunciation_hint": "DED-line",
+            "ipa_pronunciation": "/ˈded.laɪn/",
             "image_hint": "calendar with a marked due date",
+            "image_url": "",
           },
           {
             "term": "confident",
             "definition": "feeling sure about your abilities",
+            "meaning_vi": "tự tin",
+            "part_of_speech": "adjective",
             "example_sentence": "She felt confident before her speaking test.",
             "pronunciation_hint": "KON-fi-dent",
+            "ipa_pronunciation": "/ˈkɒn.fɪ.dənt/",
             "image_hint": "student speaking with confidence",
+            "image_url": "",
           },
         ],
       }
@@ -518,19 +560,39 @@ def generate_flashcards(topic: str, count: int = 10) -> list[dict]:
         continue
       term = (item.get("term") or "").strip()
       definition = (item.get("definition") or "").strip()
+      meaning_vi = (item.get("meaning_vi") or item.get("vietnamese_meaning") or "").strip()
+      part_of_speech = (item.get("part_of_speech") or item.get("pos") or "").strip().lower()
+      ipa_pronunciation = (item.get("ipa_pronunciation") or item.get("ipa") or "").strip()
+      image_url = (item.get("image_url") or "").strip()
       if not term or not definition:
         continue
+      if not image_url:
+        image_url = get_image_for_query(item.get("image_hint") or term, exact_term=term)
       normalized_cards.append({
         "term": term,
         "definition": definition,
+        "meaning_vi": meaning_vi,
+        "part_of_speech": part_of_speech,
         "example_sentence": (item.get("example_sentence") or "").strip(),
         "pronunciation_hint": (item.get("pronunciation_hint") or "").strip(),
+        "ipa_pronunciation": ipa_pronunciation,
         "image_hint": (item.get("image_hint") or "").strip(),
+        "image_url": image_url,
       })
 
     if not normalized_cards:
       fallback = _fallback_flashcards()
       normalized_cards = fallback["cards"]
+
+    for card in normalized_cards:
+      if not isinstance(card, dict):
+        continue
+      if card.get("image_url"):
+        continue
+      prompt = (card.get("image_hint") or card.get("term") or "").strip()
+      image_url = get_image_for_query(prompt, exact_term=card.get("term"))
+      if image_url:
+        card["image_url"] = image_url
     return normalized_cards
 
 

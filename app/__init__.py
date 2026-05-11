@@ -57,6 +57,7 @@ def create_app(config_class=Config):
         models.ensure_topic_progress_schema()
         models.ensure_subtopic_progress_schema()
         models.ensure_roadmap_cache_schema()
+        models.ensure_flashcard_schema()
         models.seed_default_badges()
         if app.config.get('RESET_TOPICS_ON_STARTUP', False):
             models.refresh_topics_from_ai(

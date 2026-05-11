@@ -1,11 +1,13 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
+from urllib.parse import quote
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app import db
 from app.gamification import apply_flashcard_rewards
-from app.llm_service import generate_flashcards, check_rate_limit
+from app.llm_service import generate_flashcards, check_rate_limit, get_image_for_query
 from app.models import Flashcard, FlashcardSet
 from app.sm2 import calculate_sm2
 
@@ -86,9 +88,13 @@ def generate():
             user_id=current_user.id,
             term=(item.get('term') or '').strip(),
             definition=(item.get('definition') or '').strip(),
+            vietnamese_meaning=(item.get('meaning_vi') or item.get('vietnamese_meaning') or '').strip(),
+            part_of_speech=(item.get('part_of_speech') or '').strip().lower(),
+            ipa_pronunciation=(item.get('ipa_pronunciation') or item.get('ipa') or '').strip(),
             example_sentence=(item.get('example_sentence') or '').strip(),
             pronunciation_hint=(item.get('pronunciation_hint') or '').strip(),
             image_hint=(item.get('image_hint') or '').strip(),
+            image_url=(item.get('image_url') or '').strip(),
             easiness_factor=2.5,
             interval=0,
             repetitions=0,
@@ -120,6 +126,17 @@ def review():
         query.order_by(Flashcard.next_review_date.asc()).limit(30)
     ).scalars().all()
 
+    updated = False
+    for card in due_cards:
+        if card.image_url:
+            continue
+        prompt = (card.image_hint or card.term or '').strip()
+        if not prompt:
+            continue
+        card.image_url = get_image_for_query(prompt, exact_term=card.term)
+        card.updated_at = now
+        updated = True
+
     selected_set = None
     if set_id:
         selected_set = db.session.scalar(
@@ -128,6 +145,9 @@ def review():
                 FlashcardSet.user_id == current_user.id,
             )
         )
+    if updated:
+        db.session.commit()
+
     return render_template(
         'flashcard_review.html',
         due_cards=due_cards,
